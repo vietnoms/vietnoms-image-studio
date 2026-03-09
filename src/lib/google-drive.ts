@@ -1,7 +1,6 @@
 import { google, drive_v3 } from "googleapis";
 import { OAuth2Client, Credentials } from "google-auth-library";
 import fs from "fs/promises";
-import fss from "fs";
 import path from "path";
 
 const TOKEN_PATH = path.join(process.cwd(), ".google-drive-token.json");
@@ -180,7 +179,7 @@ async function ensureFolderPath(
 // --- Upload ---
 
 export interface UploadToDriveOptions {
-  filepath: string;
+  buffer: Buffer;
   filename: string;
   workspace: string;
   category?: string;
@@ -194,7 +193,7 @@ export interface DriveUploadResult {
 
 export async function uploadToDrive(options: UploadToDriveOptions): Promise<DriveUploadResult> {
   const {
-    filepath,
+    buffer,
     filename,
     workspace,
     category = "Uncategorized",
@@ -207,8 +206,10 @@ export async function uploadToDrive(options: UploadToDriveOptions): Promise<Driv
   // Ensure folder structure exists
   const folderId = await ensureFolderPath(drive, workspace, category);
 
-  // Upload file
-  const fileStream = fss.createReadStream(filepath);
+  // Upload from buffer using a readable stream
+  const { Readable } = await import("stream");
+  const stream = Readable.from(buffer);
+
   const res = await drive.files.create({
     requestBody: {
       name: filename,
@@ -216,7 +217,7 @@ export async function uploadToDrive(options: UploadToDriveOptions): Promise<Driv
     },
     media: {
       mimeType,
-      body: fileStream,
+      body: stream,
     },
     fields: "id, webViewLink",
   });

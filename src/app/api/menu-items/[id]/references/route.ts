@@ -4,9 +4,7 @@ import {
   addReferenceImage,
   removeReferenceImage,
 } from "@/lib/menu-items";
-import path from "path";
-import fs from "fs/promises";
-import { v4 as uuidv4 } from "uuid";
+import { saveReferenceImage, deleteImage } from "@/lib/storage";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -36,17 +34,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Ensure reference directory exists
-    const refDir = path.join(
-      process.cwd(),
-      "public",
-      "storage",
-      "references",
-      item.workspace,
-      id
-    );
-    await fs.mkdir(refDir, { recursive: true });
-
     const uploadedUrls: string[] = [];
 
     for (const file of files) {
@@ -55,21 +42,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         continue; // Skip non-image files silently
       }
 
-      const ext =
-        file.type === "image/png"
-          ? "png"
-          : file.type === "image/webp"
-            ? "webp"
-            : "jpg";
-      const filename = `ref_${uuidv4().slice(0, 8)}.${ext}`;
-      const filepath = path.join(refDir, filename);
-
       const buffer = Buffer.from(await file.arrayBuffer());
-      await fs.writeFile(filepath, buffer);
 
-      const publicUrl = `/storage/references/${item.workspace}/${id}/${filename}`;
-      addReferenceImage(id, publicUrl);
-      uploadedUrls.push(publicUrl);
+      const saved = await saveReferenceImage({
+        buffer,
+        workspace: item.workspace,
+        itemId: id,
+        mimeType: file.type,
+      });
+
+      addReferenceImage(id, saved.publicUrl);
+      uploadedUrls.push(saved.publicUrl);
     }
 
     // Return updated item
@@ -88,7 +71,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 /**
- * DELETE /api/menu-items/:id/references?url=/storage/references/...
+ * DELETE /api/menu-items/:id/references?url=https://...blob.vercelcdn.com/...
  * Remove a single reference image.
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
@@ -107,13 +90,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
 
-  // Delete file from disk
-  const filepath = path.join(process.cwd(), "public", url);
-  try {
-    await fs.unlink(filepath);
-  } catch {
-    // File may already be gone
-  }
+  // Delete from Vercel Blob
+  await deleteImage(url);
 
   // Remove from item
   removeReferenceImage(id, url);

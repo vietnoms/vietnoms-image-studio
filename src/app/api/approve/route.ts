@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import fs from "fs/promises";
 import { isGoogleDriveConnected, uploadToDrive } from "@/lib/google-drive";
 
 export async function POST(request: NextRequest) {
@@ -19,21 +18,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve the local file path from the public URL
-    // imageUrl is like: /storage/images/vietnoms/2026-03/gen_20260308_abc12345.png
-    const filepath = path.join(process.cwd(), "public", imageUrl);
-
-    // Verify the file exists
-    try {
-      await fs.access(filepath);
-    } catch {
-      return NextResponse.json(
-        { error: "Image file not found on disk" },
-        { status: 404 }
-      );
-    }
-
-    const filename = path.basename(filepath);
+    // imageUrl is now a full Vercel Blob URL (https://...)
+    // Extract filename from URL
+    const filename = path.basename(new URL(imageUrl).pathname);
 
     // Attempt Google Drive upload if connected
     let driveUpload: { fileId: string; webViewLink: string } | null = null;
@@ -42,8 +29,15 @@ export async function POST(request: NextRequest) {
     const driveConnected = await isGoogleDriveConnected();
     if (driveConnected) {
       try {
+        // Fetch the image from Blob URL
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+
         driveUpload = await uploadToDrive({
-          filepath,
+          buffer,
           filename,
           workspace,
           category: category || "Uncategorized",

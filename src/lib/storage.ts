@@ -1,8 +1,5 @@
-import fs from "fs/promises";
-import path from "path";
+import { put, del } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
-
-const STORAGE_BASE = path.join(process.cwd(), "public", "storage", "images");
 
 export interface SaveImageOptions {
   buffer: Buffer;
@@ -13,8 +10,7 @@ export interface SaveImageOptions {
 
 export interface SavedImage {
   filename: string;
-  filepath: string; // absolute path on disk
-  publicUrl: string; // URL accessible from browser
+  publicUrl: string; // Vercel Blob public URL
 }
 
 function getExtension(mimeType: string): string {
@@ -36,27 +32,58 @@ export async function saveImage(options: SaveImageOptions): Promise<SavedImage> 
   const ext = getExtension(mimeType);
   const filename = `${prefix}_${timestamp}_${shortId}.${ext}`;
 
-  const dir = path.join(STORAGE_BASE, workspace, yearMonth);
-  await fs.mkdir(dir, { recursive: true });
+  const pathname = `images/${workspace}/${yearMonth}/${filename}`;
 
-  const filepath = path.join(dir, filename);
-  await fs.writeFile(filepath, buffer);
+  const blob = await put(pathname, buffer, {
+    access: "public",
+    contentType: mimeType,
+  });
 
-  // Public URL relative to /public
-  const publicUrl = `/storage/images/${workspace}/${yearMonth}/${filename}`;
-
-  return { filename, filepath, publicUrl };
+  return { filename, publicUrl: blob.url };
 }
 
-export async function deleteImage(filepath: string): Promise<void> {
+export async function saveReferenceImage(options: {
+  buffer: Buffer;
+  workspace: string;
+  itemId: string;
+  mimeType?: string;
+}): Promise<{ filename: string; publicUrl: string }> {
+  const { buffer, workspace, itemId, mimeType = "image/png" } = options;
+
+  const ext = getExtension(mimeType);
+  const filename = `ref_${uuidv4().slice(0, 8)}.${ext}`;
+  const pathname = `references/${workspace}/${itemId}/${filename}`;
+
+  const blob = await put(pathname, buffer, {
+    access: "public",
+    contentType: mimeType,
+  });
+
+  return { filename, publicUrl: blob.url };
+}
+
+export async function deleteImage(url: string): Promise<void> {
   try {
-    await fs.unlink(filepath);
+    await del(url);
   } catch {
-    // File may already be deleted
+    // Blob may already be deleted
   }
 }
 
-export async function imageToBase64(filepath: string): Promise<string> {
-  const buffer = await fs.readFile(filepath);
-  return buffer.toString("base64");
+/**
+ * Fetch an image from its Blob URL and return as base64.
+ */
+export async function imageToBase64(url: string): Promise<string> {
+  const response = await fetch(url);
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer).toString("base64");
+}
+
+/**
+ * Fetch an image from its Blob URL and return as Buffer.
+ */
+export async function imageToBuffer(url: string): Promise<Buffer> {
+  const response = await fetch(url);
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }

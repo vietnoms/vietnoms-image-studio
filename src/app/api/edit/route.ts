@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       instruction,
     });
 
-    // Save edited image to storage
+    // Save edited image to Vercel Blob storage
     const saved = await saveImage({
       buffer: result.imageBuffer,
       workspace,
