@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import {
   Dialog,
@@ -30,7 +30,7 @@ export function ImportDialog({
 }: ImportDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-5xl w-[calc(100vw-3rem)] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import Menu Items</DialogTitle>
         </DialogHeader>
@@ -110,6 +110,34 @@ function PhotoExtractTab({
   const [extractedItems, setExtractedItems] = useState<ParsedMenuItem[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sortColumn, setSortColumn] = useState<"name" | "price" | "category" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  const categories = useMemo(() => {
+    const cats = new Set(extractedItems.map(i => i.category || "Uncategorized"));
+    return Array.from(cats).sort();
+  }, [extractedItems]);
+
+  const displayItems = useMemo(() => {
+    let result = extractedItems.map((item, idx) => ({ ...item, _idx: idx }));
+    if (categoryFilter !== "all") {
+      result = result.filter(i => (i.category || "Uncategorized") === categoryFilter);
+    }
+    if (sortColumn) {
+      result.sort((a, b) => {
+        const aVal = (a[sortColumn] || "").toLowerCase();
+        const bVal = (b[sortColumn] || "").toLowerCase();
+        return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      });
+    }
+    return result;
+  }, [extractedItems, categoryFilter, sortColumn, sortDir]);
+
+  const toggleSort = (col: "name" | "price" | "category") => {
+    if (sortColumn === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortColumn(col); setSortDir("asc"); }
+  };
 
   const onDrop = useCallback((files: File[]) => {
     if (files.length > 0) {
@@ -164,7 +192,10 @@ function PhotoExtractTab({
   };
 
   const handleImport = async () => {
-    if (extractedItems.length === 0) return;
+    const toImport = categoryFilter !== "all"
+      ? displayItems.map(({ _idx, ...rest }) => rest)
+      : extractedItems;
+    if (toImport.length === 0) return;
     setIsImporting(true);
 
     try {
@@ -172,7 +203,7 @@ function PhotoExtractTab({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: extractedItems,
+          items: toImport,
           workspace,
           confirmed: true,
         }),
@@ -273,40 +304,57 @@ function PhotoExtractTab({
       {/* Extracted items table */}
       {extractedItems.length > 0 && (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-sm font-medium shrink-0">
               Extracted {extractedItems.length} items
             </h4>
-            <Button size="sm" onClick={handleImport} disabled={isImporting}>
-              {isImporting
-                ? "Importing..."
-                : `Import All (${extractedItems.length})`}
-            </Button>
+            <div className="flex items-center gap-2">
+              {categories.length > 1 && (
+                <select
+                  value={categoryFilter}
+                  onChange={e => setCategoryFilter(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              )}
+              <Button size="sm" onClick={handleImport} disabled={isImporting}>
+                {isImporting
+                  ? "Importing..."
+                  : `Import ${categoryFilter !== "all" ? `${displayItems.length} Filtered` : `All (${extractedItems.length})`}`}
+              </Button>
+            </div>
           </div>
-          <div className="border border-border rounded-lg overflow-hidden">
+          <div className="border border-border rounded-lg overflow-auto max-h-[50vh]">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50">
+              <thead className="bg-muted/50 sticky top-0">
                 <tr>
-                  <th className="px-3 py-1.5 text-left text-xs font-medium">
-                    Name
-                  </th>
-                  <th className="px-3 py-1.5 text-left text-xs font-medium">
-                    Price
-                  </th>
-                  <th className="px-3 py-1.5 text-left text-xs font-medium">
-                    Category
-                  </th>
+                  {(["name", "price", "category"] as const).map(col => (
+                    <th
+                      key={col}
+                      onClick={() => toggleSort(col)}
+                      className="px-3 py-1.5 text-left text-xs font-medium cursor-pointer hover:text-foreground select-none"
+                    >
+                      <span className="capitalize">{col}</span>
+                      {sortColumn === col && (
+                        <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+                      )}
+                    </th>
+                  ))}
                   <th className="px-3 py-1.5 w-8" />
                 </tr>
               </thead>
               <tbody>
-                {extractedItems.map((item, idx) => (
-                  <tr key={idx} className="border-t border-border">
+                {displayItems.map(item => (
+                  <tr key={item._idx} className="border-t border-border">
                     <td className="px-3 py-1.5">
                       <input
                         value={item.name}
                         onChange={(e) =>
-                          handleEditItem(idx, "name", e.target.value)
+                          handleEditItem(item._idx, "name", e.target.value)
                         }
                         className="bg-transparent w-full text-sm focus:outline-none"
                       />
@@ -315,7 +363,7 @@ function PhotoExtractTab({
                       <input
                         value={item.price || ""}
                         onChange={(e) =>
-                          handleEditItem(idx, "price", e.target.value)
+                          handleEditItem(item._idx, "price", e.target.value)
                         }
                         className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
                       />
@@ -324,14 +372,14 @@ function PhotoExtractTab({
                       <input
                         value={item.category || ""}
                         onChange={(e) =>
-                          handleEditItem(idx, "category", e.target.value)
+                          handleEditItem(item._idx, "category", e.target.value)
                         }
                         className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
                       />
                     </td>
                     <td className="px-2 py-1.5">
                       <button
-                        onClick={() => handleRemoveItem(idx)}
+                        onClick={() => handleRemoveItem(item._idx)}
                         className="text-muted-foreground hover:text-destructive transition-colors"
                       >
                         &times;
@@ -741,6 +789,34 @@ function SquareImportTab({
   const [downloadImages, setDownloadImages] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetched, setFetched] = useState(false);
+  const [sortColumn, setSortColumn] = useState<"name" | "price" | "category" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  const categories = useMemo(() => {
+    const cats = new Set(items.map(i => i.category || "Uncategorized"));
+    return Array.from(cats).sort();
+  }, [items]);
+
+  const displayItems = useMemo(() => {
+    let result = items.map((item, idx) => ({ ...item, _idx: idx }));
+    if (categoryFilter !== "all") {
+      result = result.filter(i => (i.category || "Uncategorized") === categoryFilter);
+    }
+    if (sortColumn) {
+      result.sort((a, b) => {
+        const aVal = (a[sortColumn] || "").toLowerCase();
+        const bVal = (b[sortColumn] || "").toLowerCase();
+        return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      });
+    }
+    return result;
+  }, [items, categoryFilter, sortColumn, sortDir]);
+
+  const toggleSort = (col: "name" | "price" | "category") => {
+    if (sortColumn === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortColumn(col); setSortDir("asc"); }
+  };
 
   const handleFetch = async () => {
     setIsFetching(true);
@@ -772,7 +848,10 @@ function SquareImportTab({
   };
 
   const handleImport = async () => {
-    if (items.length === 0) return;
+    const toImport = categoryFilter !== "all"
+      ? displayItems.map(({ _idx, ...rest }) => rest)
+      : items;
+    if (toImport.length === 0) return;
     setIsImporting(true);
     setError(null);
 
@@ -781,7 +860,7 @@ function SquareImportTab({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items,
+          items: toImport,
           workspace,
           downloadImages,
           imageMap,
@@ -913,11 +992,23 @@ function SquareImportTab({
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-medium">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-sm font-medium shrink-0">
               Found {items.length} items from Square
             </h4>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              {categories.length > 1 && (
+                <select
+                  value={categoryFilter}
+                  onChange={e => setCategoryFilter(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -933,35 +1024,38 @@ function SquareImportTab({
               >
                 {isImporting
                   ? "Importing..."
-                  : `Import All (${items.length})`}
+                  : `Import ${categoryFilter !== "all" ? `${displayItems.length} Filtered` : `All (${items.length})`}`}
               </Button>
             </div>
           </div>
 
-          <div className="border border-border rounded-lg overflow-hidden">
+          <div className="border border-border rounded-lg overflow-auto max-h-[50vh]">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50">
+              <thead className="bg-muted/50 sticky top-0">
                 <tr>
-                  <th className="px-3 py-1.5 text-left text-xs font-medium">
-                    Name
-                  </th>
-                  <th className="px-3 py-1.5 text-left text-xs font-medium">
-                    Price
-                  </th>
-                  <th className="px-3 py-1.5 text-left text-xs font-medium">
-                    Category
-                  </th>
+                  {(["name", "price", "category"] as const).map(col => (
+                    <th
+                      key={col}
+                      onClick={() => toggleSort(col)}
+                      className="px-3 py-1.5 text-left text-xs font-medium cursor-pointer hover:text-foreground select-none"
+                    >
+                      <span className="capitalize">{col}</span>
+                      {sortColumn === col && (
+                        <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+                      )}
+                    </th>
+                  ))}
                   <th className="px-3 py-1.5 w-8" />
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, idx) => (
-                  <tr key={idx} className="border-t border-border">
+                {displayItems.map(item => (
+                  <tr key={item._idx} className="border-t border-border">
                     <td className="px-3 py-1.5">
                       <input
                         value={item.name}
                         onChange={(e) =>
-                          handleEditItem(idx, "name", e.target.value)
+                          handleEditItem(item._idx, "name", e.target.value)
                         }
                         className="bg-transparent w-full text-sm focus:outline-none"
                       />
@@ -970,7 +1064,7 @@ function SquareImportTab({
                       <input
                         value={item.price || ""}
                         onChange={(e) =>
-                          handleEditItem(idx, "price", e.target.value)
+                          handleEditItem(item._idx, "price", e.target.value)
                         }
                         className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
                       />
@@ -979,14 +1073,14 @@ function SquareImportTab({
                       <input
                         value={item.category || ""}
                         onChange={(e) =>
-                          handleEditItem(idx, "category", e.target.value)
+                          handleEditItem(item._idx, "category", e.target.value)
                         }
                         className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
                       />
                     </td>
                     <td className="px-2 py-1.5">
                       <button
-                        onClick={() => handleRemoveItem(idx)}
+                        onClick={() => handleRemoveItem(item._idx)}
                         className="text-muted-foreground hover:text-destructive transition-colors"
                       >
                         &times;

@@ -15,6 +15,8 @@
 - Vercel CLI interactive prompts (e.g. `blob create-store`) can hang on environment selector — use the Vercel REST API as fallback.
 - To link GitHub repo to Vercel project: use `POST /v13/projects/{id}/link` with `{ type: "github", repo: "org/repo", productionBranch: "main" }`.
 - `BLOB_READ_WRITE_TOKEN` must be linked to all environments (production + preview + development) for the store to work everywhere.
+- **Serverless filesystem is read-only** — never use `fs.writeFile` to persist data on Vercel. Use Vercel Blob, KV, or a database instead. This broke Square OAuth token storage (was writing `.square-token.json` to disk).
+- When adding a new integration that requires env vars, always remind the user to add them to the Vercel dashboard too — `.env.local` is local-only.
 
 ### UI/Theming
 - The project uses Tailwind CSS v4 with oklch color space (Cosmic Night theme, hue 280).
