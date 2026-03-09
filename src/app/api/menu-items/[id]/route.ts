@@ -3,10 +3,9 @@ import {
   getMenuItemById,
   updateMenuItem,
   deleteMenuItem,
-} from "@/lib/menu-items";
+} from "@/lib/db/menu-items";
+import { deleteImage as deleteBlobImage } from "@/lib/storage";
 import { type Workspace } from "@/lib/constants";
-import fs from "fs/promises";
-import path from "path";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -15,7 +14,7 @@ interface RouteParams {
 /** GET /api/menu-items/:id */
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const item = getMenuItemById(id);
+  const item = await getMenuItemById(id);
 
   if (!item) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
@@ -45,7 +44,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (category !== undefined) updates.category = category;
     if (workspace !== undefined) updates.workspace = workspace;
 
-    const item = updateMenuItem(id, updates);
+    const item = await updateMenuItem(id, updates);
 
     if (!item) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
@@ -63,28 +62,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 /** DELETE /api/menu-items/:id — delete item and its reference images */
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const item = getMenuItemById(id);
+  const item = await getMenuItemById(id);
 
   if (!item) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
 
-  // Clean up reference images from disk
-  const refDir = path.join(
-    process.cwd(),
-    "public",
-    "storage",
-    "references",
-    item.workspace,
-    id
-  );
-  try {
-    await fs.rm(refDir, { recursive: true, force: true });
-  } catch {
-    // Directory may not exist — that's fine
+  // Clean up reference images from Vercel Blob
+  for (const url of item.referenceImages) {
+    try {
+      await deleteBlobImage(url);
+    } catch {
+      // Best-effort cleanup
+    }
   }
 
-  const deleted = deleteMenuItem(id);
+  const deleted = await deleteMenuItem(id);
   if (!deleted) {
     return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }

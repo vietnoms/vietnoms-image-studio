@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { bulkUpdateImages, type StoredImage } from "@/lib/image-store";
+import { bulkUpdateImages, type StoredImage } from "@/lib/db/images";
 
 const ACTION_TO_STATUS: Record<string, StoredImage["status"]> = {
   approve: "approved",
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const result = bulkUpdateImages(ids, updates);
+    const result = await bulkUpdateImages(ids, updates);
     return NextResponse.json(result);
   } catch (error) {
     console.error("Bulk update error:", error);

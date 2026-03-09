@@ -4,7 +4,7 @@ import {
   updateTemplate,
   deleteTemplate,
   duplicateTemplate,
-} from "@/lib/templates";
+} from "@/lib/db/templates";
 import { type AspectRatio, type Workspace } from "@/lib/constants";
 
 interface RouteParams {
@@ -14,7 +14,7 @@ interface RouteParams {
 /** GET /api/templates/:id */
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const template = getTemplateById(id);
+  const template = await getTemplateById(id);
 
   if (!template) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
@@ -56,7 +56,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (style_preset !== undefined) updates.style_preset = style_preset;
     if (workspace !== undefined) updates.workspace = workspace;
 
-    const template = updateTemplate(id, updates);
+    const template = await updateTemplate(id, updates);
 
     if (!template) {
       return NextResponse.json(
@@ -77,7 +77,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 /** DELETE /api/templates/:id */
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const deleted = deleteTemplate(id);
+  const deleted = await deleteTemplate(id);
 
   if (!deleted) {
     return NextResponse.json({ error: "Template not found" }, { status: 404 });
@@ -89,7 +89,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 /** PATCH /api/templates/:id — duplicate a template */
 export async function PATCH(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const duplicate = duplicateTemplate(id);
+  const duplicate = await duplicateTemplate(id);
 
   if (!duplicate) {
     return NextResponse.json(

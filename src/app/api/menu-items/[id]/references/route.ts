@@ -3,7 +3,7 @@ import {
   getMenuItemById,
   addReferenceImage,
   removeReferenceImage,
-} from "@/lib/menu-items";
+} from "@/lib/db/menu-items";
 import { saveReferenceImage, deleteImage } from "@/lib/storage";
 
 interface RouteParams {
@@ -17,7 +17,7 @@ interface RouteParams {
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const item = getMenuItemById(id);
+  const item = await getMenuItemById(id);
 
   if (!item) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
@@ -51,12 +51,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         mimeType: file.type,
       });
 
-      addReferenceImage(id, saved.publicUrl);
+      await addReferenceImage(id, saved.publicUrl);
       uploadedUrls.push(saved.publicUrl);
     }
 
     // Return updated item
-    const updated = getMenuItemById(id);
+    const updated = await getMenuItemById(id);
     return NextResponse.json({
       item: updated,
       uploaded: uploadedUrls.length,
@@ -85,7 +85,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     );
   }
 
-  const item = getMenuItemById(id);
+  const item = await getMenuItemById(id);
   if (!item) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
@@ -94,8 +94,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   await deleteImage(url);
 
   // Remove from item
-  removeReferenceImage(id, url);
+  await removeReferenceImage(id, url);
 
-  const updated = getMenuItemById(id);
+  const updated = await getMenuItemById(id);
   return NextResponse.json({ item: updated });
 }

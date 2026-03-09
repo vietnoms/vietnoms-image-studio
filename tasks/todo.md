@@ -1,5 +1,42 @@
 # Current Tasks
 
+## Session: 2026-03-09 — Supabase Migration + Persistence Fix
+
+- [x] Create `supabase/migrations/002_pragmatic_stores.sql` — schema for menu_items, stored_images, templates tables
+- [x] Create `src/lib/db/client.ts` — Supabase admin client wrapper
+- [x] Create `src/lib/db/templates.ts` — async Supabase CRUD for templates
+- [x] Create `src/lib/db/menu-items.ts` — async Supabase CRUD with deduplication on import
+- [x] Create `src/lib/db/images.ts` — async Supabase CRUD for stored images
+- [x] Update template API routes (2 files) to use Supabase db layer
+- [x] Update menu-items API routes (5 files) to use Supabase db layer
+- [x] Update image API routes (5 files: images, bulk, tags, generate, edit) to use Supabase db layer
+- [x] Complete Phase 3: Add generation metadata (model, cost) to gallery detail panel
+- [x] Fix Google Drive token storage — migrated from filesystem to Vercel Blob (same pattern as Square)
+- [x] Cleanup old in-memory stores — strip to types-only (keep utility functions in templates.ts)
+- [x] Build passes clean (0 TypeScript errors)
+- [ ] **USER ACTION**: Run `002_pragmatic_stores.sql` in Supabase SQL Editor
+- [ ] **USER ACTION**: Add Supabase env vars to Vercel dashboard
+- [ ] Deploy to Vercel and verify persistence across page reloads
+
+### What Changed
+- **All data now persists in Supabase PostgreSQL** — menu items, generated images, and templates survive serverless cold starts
+- **Zero frontend changes** — only `src/lib/` store layer and API route imports changed
+- **Deduplication on Square import** — re-importing same items no longer creates duplicates
+- **fs.rm() bug fixed** — DELETE route now cleans up via Vercel Blob instead of filesystem
+- **Google Drive tokens** — migrated from `.google-drive-token.json` to Vercel Blob
+
+### Files Created (5)
+- `supabase/migrations/002_pragmatic_stores.sql`
+- `src/lib/db/client.ts`
+- `src/lib/db/templates.ts`
+- `src/lib/db/menu-items.ts`
+- `src/lib/db/images.ts`
+
+### Files Modified (14)
+- 12 API route files (import path + `await` additions)
+- `src/lib/google-drive.ts` (token storage → Vercel Blob)
+- `src/components/gallery/GalleryView.tsx` (model/cost metadata in detail panel)
+
 ## Session: 2026-03-08 — Square POS Integration
 
 - [x] Create `src/lib/square.ts` — OAuth + catalog client (token storage, auth flow, paginated catalog fetch)

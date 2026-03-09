@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTags } from "@/lib/image-store";
+import { getTags } from "@/lib/db/images";
 import { type Workspace } from "@/lib/constants";
 
 // GET /api/tags?workspace=vietnoms
@@ -8,6 +8,6 @@ export async function GET(request: NextRequest) {
     | Workspace
     | null;
 
-  const tags = getTags(workspace || undefined);
+  const tags = await getTags(workspace || undefined);
   return NextResponse.json({ tags });
 }

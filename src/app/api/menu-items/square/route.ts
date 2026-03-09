@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSquareConnected, fetchCatalogItems } from "@/lib/square";
-import { importMenuItems, addReferenceImage } from "@/lib/menu-items";
+import { importMenuItems, addReferenceImage } from "@/lib/db/menu-items";
 import { saveReferenceImage } from "@/lib/storage";
-import type { ParsedMenuItem } from "@/lib/menu-items";
+import type { ParsedMenuItem } from "@/lib/db/menu-items";
 import type { Workspace } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Import items using existing bulk import function
-    const created = importMenuItems(items, workspace);
+    const created = await importMenuItems(items, workspace);
 
     // Optionally download Square product images as reference images
     if (downloadImages && Object.keys(imageMap).length > 0) {
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
             mimeType: contentType,
           });
 
-          addReferenceImage(item.id, saved.publicUrl);
+          await addReferenceImage(item.id, saved.publicUrl);
         } catch (err) {
           // Skip failed image downloads silently
           console.error(`Failed to download image for "${item.name}":`, err);

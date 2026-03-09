@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getImages, updateImage, deleteImage, type StoredImage } from "@/lib/image-store";
+import { getImages, updateImage, deleteImage, type StoredImage } from "@/lib/db/images";
 import { type Workspace } from "@/lib/constants";
 
 // GET /api/images?workspace=vietnoms&status=approved&search=pho&limit=50&offset=0
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   const tag = searchParams.get("tag") || undefined;
 
-  const result = getImages({
+  const result = await getImages({
     workspace: workspace || undefined,
     status: status || undefined,
     search,
@@ -48,7 +48,7 @@ export async function PATCH(request: NextRequest) {
     if (driveLink !== undefined) updates.driveLink = driveLink;
     if (tags !== undefined) updates.tags = tags;
 
-    const updated = updateImage(id, updates);
+    const updated = await updateImage(id, updates);
     if (!updated) {
       return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
@@ -67,7 +67,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Image ID is required" }, { status: 400 });
   }
 
-  const deleted = deleteImage(id);
+  const deleted = await deleteImage(id);
   if (!deleted) {
     return NextResponse.json({ error: "Image not found" }, { status: 404 });
   }

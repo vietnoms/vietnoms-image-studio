@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getTemplates,
   createTemplate,
-  type Template,
-} from "@/lib/templates";
+} from "@/lib/db/templates";
+import type { Template } from "@/lib/templates";
 import { type Workspace, type AspectRatio } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     | Workspace
     | null;
 
-  const templates = getTemplates(workspace ?? undefined);
+  const templates = await getTemplates(workspace ?? undefined);
   return NextResponse.json({ templates });
 }
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const template: Template = createTemplate({
+    const template: Template = await createTemplate({
       workspace,
       name,
       category: category || "Uncategorized",

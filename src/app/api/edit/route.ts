@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { editImage, isGeminiConfigured } from "@/lib/gemini";
 import { saveImage } from "@/lib/storage";
-import { addImage } from "@/lib/image-store";
+import { addImage } from "@/lib/db/images";
 import { IMAGE_COST_ESTIMATE, type Workspace } from "@/lib/constants";
 import { v4 as uuidv4 } from "uuid";
 
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     const imageId = uuidv4();
 
     // Add to shared image store
-    addImage({
+    await addImage({
       id: imageId,
       url: saved.publicUrl,
       prompt: `[Edit] ${instruction}`,

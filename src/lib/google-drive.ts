@@ -1,9 +1,8 @@
 import { google, drive_v3 } from "googleapis";
 import { OAuth2Client, Credentials } from "google-auth-library";
-import fs from "fs/promises";
-import path from "path";
+import { put, list, del } from "@vercel/blob";
 
-const TOKEN_PATH = path.join(process.cwd(), ".google-drive-token.json");
+const BLOB_TOKEN_PATH = "config/google-drive-token.json";
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 const ROOT_FOLDER_NAME = "Image Studio";
 
@@ -11,6 +10,7 @@ const ROOT_FOLDER_NAME = "Image Studio";
 const folderCache = new Map<string, string>();
 
 let oauth2Client: OAuth2Client | null = null;
+let cachedTokens: Credentials | null = null;
 
 // --- Configuration checks ---
 
@@ -84,11 +84,7 @@ export async function handleAuthCallback(code: string): Promise<void> {
 }
 
 export async function disconnectDrive(): Promise<void> {
-  try {
-    await fs.unlink(TOKEN_PATH);
-  } catch {
-    // File may not exist
-  }
+  await deleteTokens();
   if (oauth2Client) {
     oauth2Client.revokeCredentials().catch(() => {});
     oauth2Client = null;
@@ -96,19 +92,54 @@ export async function disconnectDrive(): Promise<void> {
   folderCache.clear();
 }
 
-// --- Token persistence ---
+// --- Token persistence (Vercel Blob + in-memory cache) ---
 
 async function saveTokens(tokens: Credentials): Promise<void> {
-  await fs.writeFile(TOKEN_PATH, JSON.stringify(tokens, null, 2), "utf-8");
+  cachedTokens = tokens;
+
+  // Delete any existing blob at this path first
+  try {
+    const { blobs } = await list({ prefix: BLOB_TOKEN_PATH });
+    for (const blob of blobs) {
+      await del(blob.url);
+    }
+  } catch { /* no existing blob */ }
+
+  await put(BLOB_TOKEN_PATH, JSON.stringify(tokens), {
+    access: "public",
+    addRandomSuffix: false,
+    contentType: "application/json",
+  });
 }
 
 async function loadTokens(): Promise<Credentials | null> {
+  if (cachedTokens) return cachedTokens;
+
   try {
-    const data = await fs.readFile(TOKEN_PATH, "utf-8");
-    return JSON.parse(data);
+    const { blobs } = await list({ prefix: BLOB_TOKEN_PATH });
+    if (blobs.length > 0) {
+      const response = await fetch(blobs[0].url);
+      if (response.ok) {
+        const tokens = await response.json();
+        cachedTokens = tokens;
+        return tokens;
+      }
+    }
   } catch {
-    return null;
+    // Blob read failed
   }
+
+  return null;
+}
+
+async function deleteTokens(): Promise<void> {
+  cachedTokens = null;
+  try {
+    const { blobs } = await list({ prefix: BLOB_TOKEN_PATH });
+    for (const blob of blobs) {
+      await del(blob.url);
+    }
+  } catch { /* ignore */ }
 }
 
 // --- Folder management ---

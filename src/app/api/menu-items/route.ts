@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMenuItems, createMenuItem } from "@/lib/menu-items";
+import { getMenuItems, createMenuItem } from "@/lib/db/menu-items";
 import { type Workspace } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     | null;
   const category = request.nextUrl.searchParams.get("category") || undefined;
 
-  const items = getMenuItems(workspace ?? undefined, category);
+  const items = await getMenuItems(workspace ?? undefined, category);
   return NextResponse.json({ items });
 }
 
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const item = createMenuItem({
+    const item = await createMenuItem({
       workspace,
       name: name.trim(),
       description: (description || "").trim(),

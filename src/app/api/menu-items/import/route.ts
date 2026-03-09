@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { importMenuItems, type ParsedMenuItem } from "@/lib/menu-items";
+import { importMenuItems, type ParsedMenuItem } from "@/lib/db/menu-items";
 import { parseCSVString, parseSpreadsheet, mapRowsToItems } from "@/lib/menu-extract";
 import { type Workspace } from "@/lib/constants";
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (confirmed) {
-        const created = importMenuItems(finalItems, workspace);
+        const created = await importMenuItems(finalItems, workspace);
         return NextResponse.json({
           success: true,
           imported: created.length,

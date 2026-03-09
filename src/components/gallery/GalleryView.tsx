@@ -15,6 +15,8 @@ interface GalleryImage {
   isFavorite: boolean;
   createdAt: string;
   driveLink?: string | null;
+  model?: string;
+  costEstimate?: number;
   tags: string[];
 }
 
@@ -697,6 +699,23 @@ export function GalleryView({ workspace }: GalleryViewProps) {
                     </button>
                   </div>
                 </div>
+
+                {/* Generation Details */}
+                {(selectedImage.model || selectedImage.costEstimate) && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                      Generation Details
+                    </p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+                      {selectedImage.model && (
+                        <span>Model: <span className="text-foreground">{selectedImage.model.replace("models/", "")}</span></span>
+                      )}
+                      {selectedImage.costEstimate != null && selectedImage.costEstimate > 0 && (
+                        <span>Cost: <span className="text-foreground">${selectedImage.costEstimate.toFixed(4)}</span></span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex flex-wrap gap-1.5">
