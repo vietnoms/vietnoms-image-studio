@@ -1,0 +1,388 @@
+"use client";
+
+import { useState, useCallback, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { PromptInput } from "./PromptInput";
+import { ParameterControls } from "./ParameterControls";
+import { TemplateSelector } from "./TemplateSelector";
+import { ItemPicker } from "./ItemPicker";
+import { ResultPreview, type GeneratedImage } from "./ResultPreview";
+import { type AspectRatio, type Workspace } from "@/lib/constants";
+import { type Template, fillTemplate, extractVariables } from "@/lib/templates";
+import { type MenuItem } from "@/lib/menu-items";
+
+interface GeneratePanelProps {
+  workspace: Workspace;
+  onCostUpdate: (cost: number) => void;
+}
+
+export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
+  const [prompt, setPrompt] = useState("");
+  const [negativePrompt, setNegativePrompt] = useState("");
+  const [showNegative, setShowNegative] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("1:1");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [currentImage, setCurrentImage] = useState<GeneratedImage | null>(null);
+  const [recentImages, setRecentImages] = useState<GeneratedImage[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  // Template state
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
+    null
+  );
+  const [variableValues, setVariableValues] = useState<Record<string, string>>(
+    {}
+  );
+
+  // Menu item state
+  const [selectedItems, setSelectedItems] = useState<MenuItem[]>([]);
+
+  // When a template is selected, adopt its aspect ratio and negative prompt
+  const handleSelectTemplate = useCallback(
+    (template: Template | null) => {
+      setSelectedTemplate(template);
+      setVariableValues({});
+      if (template) {
+        setAspectRatio(template.aspect_ratio);
+        if (template.negative_prompt) {
+          setNegativePrompt(template.negative_prompt);
+        }
+      }
+    },
+    []
+  );
+
+  // Clear template and items when workspace changes
+  useEffect(() => {
+    setSelectedTemplate(null);
+    setVariableValues({});
+    setSelectedItems([]);
+  }, [workspace]);
+
+  const handleVariableChange = useCallback(
+    (name: string, value: string) => {
+      setVariableValues((prev) => ({ ...prev, [name]: value }));
+    },
+    []
+  );
+
+  // Build the final prompt from template + variables + items + free text
+  const buildFinalPrompt = (): string => {
+    let base = "";
+
+    if (selectedTemplate) {
+      // Auto-fill template variables from selected items if a single item
+      const mergedVars = { ...variableValues };
+      if (selectedItems.length === 1) {
+        const item = selectedItems[0];
+        const vars = extractVariables(selectedTemplate.prompt_text);
+        for (const v of vars) {
+          if (!mergedVars[v]?.trim()) {
+            // Auto-fill common variable patterns from item data
+            const lower = v.toLowerCase();
+            if (
+              lower.includes("name") ||
+              lower.includes("item") ||
+              lower.includes("dish") ||
+              lower.includes("beverage") ||
+              lower.includes("product") ||
+              lower.includes("food")
+            ) {
+              mergedVars[v] = item.name;
+            }
+          }
+        }
+      }
+      base = fillTemplate(selectedTemplate.prompt_text, mergedVars);
+    }
+
+    // Scene mode: compose prompt listing all selected items
+    if (selectedItems.length >= 2) {
+      const itemNames = selectedItems.map((i) => i.name).join(", ");
+      const sceneDesc = `A composed scene featuring ${selectedItems.length} items: ${itemNames}.`;
+      base = base ? `${base}\n\n${sceneDesc}` : sceneDesc;
+    }
+
+    // Append any additional instructions from the free-text prompt
+    const extra = prompt.trim();
+    if (extra) {
+      base = base ? `${base}\n\n${extra}` : extra;
+    }
+
+    return base;
+  };
+
+  // Check if we can generate (template vars filled, items selected, or free-text prompt)
+  const canGenerate = (): boolean => {
+    if (isGenerating) return false;
+    // Items selected = can always generate (scene mode or item-based)
+    if (selectedItems.length > 0) return true;
+    if (selectedTemplate) {
+      const vars = extractVariables(selectedTemplate.prompt_text);
+      const hasVars = vars.some((v) => variableValues[v]?.trim());
+      return hasVars || !!prompt.trim();
+    }
+    return !!prompt.trim();
+  };
+
+  // Collect all reference images from selected items as base64
+  const collectReferenceImages = async (): Promise<
+    { data: string; mimeType: string }[]
+  > => {
+    const refs: { data: string; mimeType: string }[] = [];
+    for (const item of selectedItems) {
+      for (const url of item.referenceImages) {
+        try {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          const buffer = await blob.arrayBuffer();
+          const base64 = btoa(
+            new Uint8Array(buffer).reduce(
+              (data, byte) => data + String.fromCharCode(byte),
+              ""
+            )
+          );
+          refs.push({ data: base64, mimeType: blob.type || "image/jpeg" });
+        } catch {
+          // Skip failed fetches
+        }
+        // Gemini limit ~14 reference images
+        if (refs.length >= 12) break;
+      }
+      if (refs.length >= 12) break;
+    }
+    return refs;
+  };
+
+  // Helper to update an image in both current and recent state
+  const updateImage = (id: string, updates: Partial<GeneratedImage>) => {
+    setCurrentImage((prev) =>
+      prev?.id === id ? { ...prev, ...updates } : prev
+    );
+    setRecentImages((prev) =>
+      prev.map((img) => (img.id === id ? { ...img, ...updates } : img))
+    );
+  };
+
+  const handleGenerate = async () => {
+    const finalPrompt = buildFinalPrompt();
+    if (!finalPrompt) return;
+
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      // Collect reference images from selected menu items
+      const referenceImages = await collectReferenceImages();
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: finalPrompt,
+          negativePrompt: negativePrompt.trim() || undefined,
+          aspectRatio,
+          workspace,
+          templateId: selectedTemplate?.id,
+          referenceImages:
+            referenceImages.length > 0 ? referenceImages : undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Generation failed");
+      }
+
+      const newImage: GeneratedImage = {
+        id: data.image.id,
+        url: data.image.url,
+        prompt: finalPrompt,
+        aspectRatio,
+        createdAt: new Date().toISOString(),
+        status: "pending",
+      };
+
+      setCurrentImage(newImage);
+      setRecentImages((prev) => [newImage, ...prev].slice(0, 20));
+
+      if (data.image.costEstimate) {
+        onCostUpdate(data.image.costEstimate);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleApprove = async (image: GeneratedImage) => {
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const category =
+        selectedTemplate?.category ||
+        (selectedItems.length > 0 ? selectedItems[0].category : undefined);
+      const response = await fetch("/api/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: image.url,
+          workspace,
+          category,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Approval failed");
+      }
+
+      updateImage(image.id, {
+        status: "approved",
+        driveLink: data.driveUpload?.webViewLink ?? null,
+      });
+
+      if (data.driveError) {
+        setError(
+          `Approved locally, but Drive upload failed: ${data.driveError}`
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Approval failed");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleReject = (image: GeneratedImage) => {
+    updateImage(image.id, { status: "rejected" });
+  };
+
+  const handleFavorite = (image: GeneratedImage) => {
+    updateImage(image.id, { isFavorite: !image.isFavorite });
+  };
+
+  const handleDownload = (image: GeneratedImage) => {
+    const link = document.createElement("a");
+    link.href = image.url;
+    link.download = `image-studio-${image.id}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="flex h-full">
+      {/* Left panel — Controls */}
+      <div className="w-[380px] border-r border-border p-4 space-y-4 overflow-y-auto">
+        {/* Template selector */}
+        <div className="space-y-2">
+          <TemplateSelector
+            workspace={workspace}
+            selectedTemplate={selectedTemplate}
+            onSelectTemplate={handleSelectTemplate}
+          />
+        </div>
+
+        {/* Menu item picker */}
+        {workspace !== "general" && (
+          <div className="space-y-2">
+            <ItemPicker
+              workspace={workspace}
+              selectedItems={selectedItems}
+              onSelectionChange={setSelectedItems}
+            />
+          </div>
+        )}
+
+        {/* Prompt input with template variable fields */}
+        <PromptInput
+          prompt={prompt}
+          negativePrompt={negativePrompt}
+          onPromptChange={setPrompt}
+          onNegativePromptChange={setNegativePrompt}
+          showNegative={showNegative}
+          onToggleNegative={() => setShowNegative(!showNegative)}
+          selectedTemplate={selectedTemplate}
+          variableValues={variableValues}
+          onVariableChange={handleVariableChange}
+          selectedItems={selectedItems}
+        />
+
+        {/* Aspect ratio */}
+        <ParameterControls
+          aspectRatio={aspectRatio}
+          onAspectRatioChange={setAspectRatio}
+        />
+
+        {/* Generate button — gradient accent */}
+        <div className="space-y-2 pt-1">
+          <button
+            onClick={handleGenerate}
+            disabled={!canGenerate()}
+            className="w-full h-10 rounded-lg text-sm font-medium text-white transition-all duration-200 gradient-primary hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 glow-sm flex items-center justify-center gap-2"
+          >
+            {isGenerating ? (
+              <>
+                <svg
+                  className="w-4 h-4 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                </svg>
+                Generate
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Error display */}
+        {error && (
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive">
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* Right panel — Preview */}
+      <div className="flex-1 bg-background">
+        <ResultPreview
+          currentImage={currentImage}
+          recentImages={recentImages}
+          isGenerating={isGenerating}
+          isUploading={isUploading}
+          onSelectImage={setCurrentImage}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          onFavorite={handleFavorite}
+          onDownload={handleDownload}
+        />
+      </div>
+    </div>
+  );
+}
