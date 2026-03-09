@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { type Workspace } from "@/lib/constants";
 import { type ParsedMenuItem } from "@/lib/menu-items";
+import { useSquare } from "@/hooks/useSquare";
 
 interface ImportDialogProps {
   open: boolean;
@@ -44,6 +45,9 @@ export function ImportDialog({
             <TabsTrigger value="manual" className="flex-1">
               Manual Entry
             </TabsTrigger>
+            <TabsTrigger value="square" className="flex-1">
+              Square POS
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="photo" className="mt-4">
@@ -68,6 +72,16 @@ export function ImportDialog({
 
           <TabsContent value="manual" className="mt-4">
             <ManualEntryTab
+              workspace={workspace}
+              onComplete={() => {
+                onImportComplete();
+                onOpenChange(false);
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="square" className="mt-4">
+            <SquareImportTab
               workspace={workspace}
               onComplete={() => {
                 onImportComplete();
@@ -704,6 +718,299 @@ function ManualEntryTab({
           <Button variant="outline" onClick={onComplete}>
             Done — View Catalog
           </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab 4: Square POS Import ──────────────────────────────────────────
+
+function SquareImportTab({
+  workspace,
+  onComplete,
+}: {
+  workspace: Workspace;
+  onComplete: () => void;
+}) {
+  const square = useSquare();
+  const [items, setItems] = useState<ParsedMenuItem[]>([]);
+  const [imageMap, setImageMap] = useState<Record<string, string>>({});
+  const [isFetching, setIsFetching] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [downloadImages, setDownloadImages] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [fetched, setFetched] = useState(false);
+
+  const handleFetch = async () => {
+    setIsFetching(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/menu-items/square");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to fetch catalog");
+
+      setItems(data.items || []);
+      setImageMap(data.images || {});
+      setFetched(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch catalog");
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditItem = (index: number, field: keyof ParsedMenuItem, value: string) => {
+    setItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const handleImport = async () => {
+    if (items.length === 0) return;
+    setIsImporting(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/menu-items/square", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items,
+          workspace,
+          downloadImages,
+          imageMap,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+
+      onComplete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  // State A: Not connected
+  if (!square.connected) {
+    return (
+      <div className="space-y-4">
+        <div className="border-2 border-dashed rounded-lg p-8 text-center">
+          <svg
+            className="w-10 h-10 mx-auto text-muted-foreground mb-2"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349M3.75 21V9.349m0 0a3.001 3.001 0 0 0 3.75-.615A2.993 2.993 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.015a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72l1.189-1.19A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72M6.75 18h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .414.336.75.75.75Z"
+            />
+          </svg>
+          <p className="text-sm font-medium mb-1">Import from Square POS</p>
+          <p className="text-xs text-muted-foreground mb-4">
+            Connect your Square account to import your item catalog directly.
+          </p>
+          {!square.configured ? (
+            <p className="text-xs text-muted-foreground">
+              Square is not configured. Add <code className="text-xs">SQUARE_APP_ID</code> and{" "}
+              <code className="text-xs">SQUARE_APP_SECRET</code> to your environment.
+            </p>
+          ) : (
+            <Button
+              onClick={square.connect}
+              disabled={square.isConnecting}
+            >
+              {square.isConnecting ? "Connecting..." : "Connect Square Account"}
+            </Button>
+          )}
+        </div>
+
+        {(error || square.error) && (
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+            {error || square.error}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // State B: Connected but not fetched yet
+  if (!fetched) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-sm font-medium">Connected to Square</span>
+          </div>
+          <button
+            onClick={square.disconnect}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Disconnect
+          </button>
+        </div>
+
+        <div className="border-2 border-dashed rounded-lg p-8 text-center">
+          <p className="text-sm text-muted-foreground mb-3">
+            Pull your item catalog from Square to review and import.
+          </p>
+          <Button onClick={handleFetch} disabled={isFetching}>
+            {isFetching ? "Fetching..." : "Fetch Catalog Items"}
+          </Button>
+        </div>
+
+        {error && (
+          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // State C: Items fetched — show editable preview table
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+          <span className="text-sm font-medium">Connected to Square</span>
+        </div>
+        <button
+          onClick={square.disconnect}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Disconnect
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <div className="border-2 border-dashed rounded-lg p-8 text-center">
+          <p className="text-sm text-muted-foreground mb-3">
+            No items found in your Square catalog.
+          </p>
+          <Button variant="ghost" onClick={handleFetch} disabled={isFetching}>
+            {isFetching ? "Fetching..." : "Retry"}
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium">
+              Found {items.length} items from Square
+            </h4>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleFetch}
+                disabled={isFetching}
+              >
+                {isFetching ? "Fetching..." : "Refetch"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleImport}
+                disabled={isImporting}
+              >
+                {isImporting
+                  ? "Importing..."
+                  : `Import All (${items.length})`}
+              </Button>
+            </div>
+          </div>
+
+          <div className="border border-border rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-3 py-1.5 text-left text-xs font-medium">
+                    Name
+                  </th>
+                  <th className="px-3 py-1.5 text-left text-xs font-medium">
+                    Price
+                  </th>
+                  <th className="px-3 py-1.5 text-left text-xs font-medium">
+                    Category
+                  </th>
+                  <th className="px-3 py-1.5 w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, idx) => (
+                  <tr key={idx} className="border-t border-border">
+                    <td className="px-3 py-1.5">
+                      <input
+                        value={item.name}
+                        onChange={(e) =>
+                          handleEditItem(idx, "name", e.target.value)
+                        }
+                        className="bg-transparent w-full text-sm focus:outline-none"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <input
+                        value={item.price || ""}
+                        onChange={(e) =>
+                          handleEditItem(idx, "price", e.target.value)
+                        }
+                        className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <input
+                        value={item.category || ""}
+                        onChange={(e) =>
+                          handleEditItem(idx, "category", e.target.value)
+                        }
+                        className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <button
+                        onClick={() => handleRemoveItem(idx)}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        &times;
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {Object.keys(imageMap).length > 0 && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={downloadImages}
+                onChange={(e) => setDownloadImages(e.target.checked)}
+                className="rounded border-border"
+              />
+              <span className="text-muted-foreground">
+                Download product images as references ({Object.keys(imageMap).length} available)
+              </span>
+            </label>
+          )}
         </div>
       )}
     </div>

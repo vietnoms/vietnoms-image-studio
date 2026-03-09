@@ -10,7 +10,11 @@
 - Always run `next build` before deploying to catch TypeScript errors early.
 - Vercel CLI is available via `npx vercel` — use `--yes --prod` for production deploys.
 - In-memory stores (menu items, templates) are ephemeral on Vercel serverless — data resets on cold starts.
-- Local filesystem storage (`public/storage/`) does not persist on Vercel — needs cloud storage for production.
+- Local filesystem storage (`public/storage/`) does not persist on Vercel — use Vercel Blob instead.
+- Vercel Blob: use `put(pathname, buffer, { access: "public" })` for uploads, `del(url)` for deletes.
+- Vercel CLI interactive prompts (e.g. `blob create-store`) can hang on environment selector — use the Vercel REST API as fallback.
+- To link GitHub repo to Vercel project: use `POST /v13/projects/{id}/link` with `{ type: "github", repo: "org/repo", productionBranch: "main" }`.
+- `BLOB_READ_WRITE_TOKEN` must be linked to all environments (production + preview + development) for the store to work everywhere.
 
 ### UI/Theming
 - The project uses Tailwind CSS v4 with oklch color space (Cosmic Night theme, hue 280).
