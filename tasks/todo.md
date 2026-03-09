@@ -1,5 +1,23 @@
 # Current Tasks
 
+## Session: 2026-03-09 — Website Media Integration
+
+- [x] Add `VIETNOMS_SITE_URL` + `MEDIA_INGEST_KEY` env vars
+- [x] Update `/api/approve` route — call website ingest endpoint after Drive upload
+- [x] Add `mapCategory()` helper — maps studio categories to website's accepted values
+- [x] Pass `tags` + `itemName` from GeneratePanel to approve route
+- [x] Build passes clean, dev server verified
+
+### What Changed
+- **Website ingest on approve** — When an image is approved, it's now also pushed to the vietnoms website's media library via `POST /api/media/ingest`
+- **Category mapping** — Studio template categories (entree, beverage, promo) are mapped to website categories (food, marketing, etc.)
+- **Partial success pattern** — Website ingest failure is non-blocking, same as Google Drive (approve succeeds locally, error shown as warning)
+- **Alt text** — Uses item name or category as alt text for the website media entry
+
+### Files Modified (2)
+- `src/app/api/approve/route.ts` (website ingest block, mapCategory helper, tags/itemName params)
+- `src/components/studio/GeneratePanel.tsx` (pass itemName + tags to approve)
+
 ## Session: 2026-03-09 — Phase 5: Batch Generation
 
 - [x] Add batch mode toggle + cost estimate to GeneratePanel

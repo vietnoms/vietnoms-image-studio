@@ -236,6 +236,7 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
       const category =
         selectedTemplate?.category ||
         (selectedItems.length > 0 ? selectedItems[0].category : undefined);
+      const itemName = selectedItems.length > 0 ? selectedItems[0].name : undefined;
       const response = await fetch("/api/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -243,6 +244,8 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
           imageUrl: image.url,
           workspace,
           category,
+          tags: [],
+          itemName,
         }),
       });
 
@@ -257,10 +260,11 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
         driveLink: data.driveUpload?.webViewLink ?? null,
       });
 
-      if (data.driveError) {
-        setError(
-          `Approved locally, but Drive upload failed: ${data.driveError}`
-        );
+      const warnings: string[] = [];
+      if (data.driveError) warnings.push(`Drive: ${data.driveError}`);
+      if (data.websiteError) warnings.push(`Website: ${data.websiteError}`);
+      if (warnings.length > 0) {
+        setError(`Approved, but: ${warnings.join("; ")}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Approval failed");
