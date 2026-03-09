@@ -1,5 +1,27 @@
 # Current Tasks
 
+## Session: 2026-03-09 — Phase 5: Batch Generation
+
+- [x] Add batch mode toggle + cost estimate to GeneratePanel
+- [x] Create `BatchProgress.tsx` — progress bar, per-item status, cancel/done buttons
+- [x] Implement `handleBatchGenerate()` — sequential API calls with progress tracking
+- [x] Wire batch results into ResultPreview (first success shown on "View Results")
+- [x] Build passes clean, Studio page loads without errors
+
+### What Changed
+- **Batch mode toggle** — When 2+ items and a template are selected, a toggle switch enables batch mode
+- **Cost estimate** — Shows `N items × $0.18 = $X.XX estimated` when batch mode is active
+- **"Generate All (N)" button** — Replaces single Generate button in batch mode
+- **Progress UI** — BatchProgress component shows progress bar, per-item status (pending/generating/done/error), thumbnails, and Cancel button
+- **Sequential generation** — Calls `/api/generate` once per item with auto-filled template variables (name, description, price, category)
+- **Cancellation** — Uses `useRef` to cancel mid-batch without stale closure issues, remaining items marked as cancelled
+
+### Files Created (1)
+- `src/components/studio/BatchProgress.tsx`
+
+### Files Modified (1)
+- `src/components/studio/GeneratePanel.tsx` (batch state, buildPromptForItem, handleBatchGenerate, batch UI)
+
 ## Session: 2026-03-09 — Phase 4: Image Editing with Mask Painting
 
 - [x] Create `MaskCanvas.tsx` — HTML5 Canvas overlay for painting edit masks (paint/erase modes, custom brush cursor, white-on-black mask export)

@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { PromptInput } from "./PromptInput";
 import { ParameterControls } from "./ParameterControls";
 import { TemplateSelector } from "./TemplateSelector";
 import { ItemPicker } from "./ItemPicker";
 import { ResultPreview, type GeneratedImage } from "./ResultPreview";
-import { type AspectRatio, type Workspace } from "@/lib/constants";
+import { BatchProgress, type BatchResult } from "./BatchProgress";
+import { type AspectRatio, type Workspace, IMAGE_COST_ESTIMATE } from "@/lib/constants";
 import { type Template, fillTemplate, extractVariables } from "@/lib/templates";
 import { type MenuItem } from "@/lib/menu-items";
+import { cn } from "@/lib/utils";
 
 interface GeneratePanelProps {
   workspace: Workspace;
@@ -37,6 +39,14 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
 
   // Menu item state
   const [selectedItems, setSelectedItems] = useState<MenuItem[]>([]);
+
+  // Batch generation state
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [batchResults, setBatchResults] = useState<BatchResult[]>([]);
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [batchCompleted, setBatchCompleted] = useState(0);
+  const batchCancelledRef = useRef(false);
 
   // When a template is selected, adopt its aspect ratio and negative prompt
   const handleSelectTemplate = useCallback(
@@ -276,6 +286,208 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
     document.body.removeChild(link);
   };
 
+  // Build prompt for a single item using selected template
+  const buildPromptForItem = (item: MenuItem): string => {
+    let base = "";
+    if (selectedTemplate) {
+      const mergedVars: Record<string, string> = { ...variableValues };
+      const vars = extractVariables(selectedTemplate.prompt_text);
+      for (const v of vars) {
+        if (!mergedVars[v]?.trim()) {
+          const lower = v.toLowerCase();
+          if (
+            lower.includes("name") ||
+            lower.includes("item") ||
+            lower.includes("dish") ||
+            lower.includes("beverage") ||
+            lower.includes("product") ||
+            lower.includes("food")
+          ) {
+            mergedVars[v] = item.name;
+          }
+          if (lower.includes("description") || lower.includes("desc")) {
+            mergedVars[v] = item.description || item.name;
+          }
+          if (lower.includes("price")) {
+            mergedVars[v] = item.price || "";
+          }
+          if (lower.includes("category") || lower.includes("type")) {
+            mergedVars[v] = item.category || "";
+          }
+        }
+      }
+      base = fillTemplate(selectedTemplate.prompt_text, mergedVars);
+    } else {
+      base = item.name;
+    }
+
+    const extra = prompt.trim();
+    if (extra) {
+      base = base ? `${base}\n\n${extra}` : extra;
+    }
+    return base;
+  };
+
+  // Collect reference images for a single item
+  const collectItemReferenceImages = async (
+    item: MenuItem
+  ): Promise<{ data: string; mimeType: string }[]> => {
+    const refs: { data: string; mimeType: string }[] = [];
+    for (const url of item.referenceImages) {
+      try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        const buffer = await blob.arrayBuffer();
+        const base64 = btoa(
+          new Uint8Array(buffer).reduce(
+            (data, byte) => data + String.fromCharCode(byte),
+            ""
+          )
+        );
+        refs.push({ data: base64, mimeType: blob.type || "image/jpeg" });
+      } catch {
+        // Skip
+      }
+      if (refs.length >= 12) break;
+    }
+    return refs;
+  };
+
+  const handleBatchGenerate = async () => {
+    if (!selectedTemplate || selectedItems.length < 2) return;
+
+    batchCancelledRef.current = false;
+    setIsBatchRunning(true);
+    setBatchTotal(selectedItems.length);
+    setBatchCompleted(0);
+    setError(null);
+
+    // Initialize results
+    const initialResults: BatchResult[] = selectedItems.map((item) => ({
+      itemId: item.id,
+      itemName: item.name,
+      status: "pending" as const,
+    }));
+    setBatchResults(initialResults);
+
+    let completedCount = 0;
+
+    for (let i = 0; i < selectedItems.length; i++) {
+      if (batchCancelledRef.current) break;
+
+      const item = selectedItems[i];
+
+      // Mark current item as generating
+      setBatchResults((prev) =>
+        prev.map((r, idx) =>
+          idx === i ? { ...r, status: "generating" as const } : r
+        )
+      );
+
+      try {
+        const itemPrompt = buildPromptForItem(item);
+        const referenceImages = await collectItemReferenceImages(item);
+
+        if (batchCancelledRef.current) break;
+
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: itemPrompt,
+            negativePrompt: negativePrompt.trim() || undefined,
+            aspectRatio,
+            workspace,
+            templateId: selectedTemplate.id,
+            referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Generation failed");
+        }
+
+        const newImage: GeneratedImage = {
+          id: data.image.id,
+          url: data.image.url,
+          prompt: itemPrompt,
+          aspectRatio,
+          createdAt: new Date().toISOString(),
+          status: "pending",
+        };
+
+        completedCount++;
+        setBatchCompleted(completedCount);
+        setBatchResults((prev) =>
+          prev.map((r, idx) =>
+            idx === i ? { ...r, status: "done" as const, image: newImage } : r
+          )
+        );
+
+        // Add to recent images
+        setRecentImages((prev) => [newImage, ...prev].slice(0, 20));
+
+        if (data.image.costEstimate) {
+          onCostUpdate(data.image.costEstimate);
+        }
+      } catch (err) {
+        completedCount++;
+        setBatchCompleted(completedCount);
+        setBatchResults((prev) =>
+          prev.map((r, idx) =>
+            idx === i
+              ? {
+                  ...r,
+                  status: "error" as const,
+                  error: err instanceof Error ? err.message : "Failed",
+                }
+              : r
+          )
+        );
+      }
+    }
+
+    // Mark any remaining pending items as cancelled if we stopped early
+    if (batchCancelledRef.current) {
+      setBatchResults((prev) =>
+        prev.map((r) =>
+          r.status === "pending"
+            ? { ...r, status: "error" as const, error: "Cancelled" }
+            : r
+        )
+      );
+      setBatchCompleted(selectedItems.length);
+    }
+
+    setIsBatchRunning(false);
+  };
+
+  const handleBatchCancel = () => {
+    batchCancelledRef.current = true;
+  };
+
+  const handleBatchDone = () => {
+    // Show first successful result as current image
+    const firstSuccess = batchResults.find((r) => r.status === "done" && r.image);
+    if (firstSuccess?.image) {
+      setCurrentImage(firstSuccess.image);
+    }
+    setBatchResults([]);
+    setBatchTotal(0);
+    setBatchCompleted(0);
+  };
+
+  const canBatchGenerate =
+    isBatchMode &&
+    selectedTemplate != null &&
+    selectedItems.length >= 2 &&
+    !isBatchRunning &&
+    !isGenerating;
+
+  const batchCostEstimate = selectedItems.length * IMAGE_COST_ESTIMATE.generation;
+
   return (
     <div className="flex h-full">
       {/* Left panel — Controls */}
@@ -320,45 +532,90 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
           onAspectRatioChange={setAspectRatio}
         />
 
-        {/* Generate button — gradient accent */}
+        {/* Batch mode toggle */}
+        {workspace !== "general" && selectedItems.length >= 2 && selectedTemplate && (
+          <div className="flex items-center justify-between py-1">
+            <label className="text-xs text-muted-foreground">Batch Mode</label>
+            <button
+              onClick={() => setIsBatchMode(!isBatchMode)}
+              className={cn(
+                "relative w-9 h-5 rounded-full transition-colors",
+                isBatchMode ? "bg-primary" : "bg-muted"
+              )}
+            >
+              <div
+                className={cn(
+                  "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform",
+                  isBatchMode ? "translate-x-4" : "translate-x-0.5"
+                )}
+              />
+            </button>
+          </div>
+        )}
+
+        {/* Batch cost estimate */}
+        {isBatchMode && selectedItems.length >= 2 && (
+          <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20 text-xs text-muted-foreground">
+            <span className="text-foreground font-medium">{selectedItems.length} items</span>
+            {" × $"}{IMAGE_COST_ESTIMATE.generation.toFixed(2)}
+            {" = "}
+            <span className="text-primary font-medium">${batchCostEstimate.toFixed(2)}</span>
+            {" estimated"}
+          </div>
+        )}
+
+        {/* Generate / Batch Generate button */}
         <div className="space-y-2 pt-1">
-          <button
-            onClick={handleGenerate}
-            disabled={!canGenerate()}
-            className="w-full h-10 rounded-lg text-sm font-medium text-white transition-all duration-200 gradient-primary hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 glow-sm flex items-center justify-center gap-2"
-          >
-            {isGenerating ? (
-              <>
-                <svg
-                  className="w-4 h-4 animate-spin"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-                Generating...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-                </svg>
-                Generate
-              </>
-            )}
-          </button>
+          {isBatchMode ? (
+            <button
+              onClick={handleBatchGenerate}
+              disabled={!canBatchGenerate}
+              className="w-full h-10 rounded-lg text-sm font-medium text-white transition-all duration-200 gradient-primary hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 glow-sm flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6.878V6a2.25 2.25 0 0 1 2.25-2.25h7.5A2.25 2.25 0 0 1 18 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 0 0 4.5 9v.878m13.5-3A2.25 2.25 0 0 1 19.5 9v.878m0 0a2.246 2.246 0 0 0-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0 1 21 12v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6c0-1.243 1.007-2.25 2.25-2.25h13.5" />
+              </svg>
+              Generate All ({selectedItems.length})
+            </button>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={!canGenerate()}
+              className="w-full h-10 rounded-lg text-sm font-medium text-white transition-all duration-200 gradient-primary hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 glow-sm flex items-center justify-center gap-2"
+            >
+              {isGenerating ? (
+                <>
+                  <svg
+                    className="w-4 h-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+                  </svg>
+                  Generate
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Error display */}
@@ -369,19 +626,30 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
         )}
       </div>
 
-      {/* Right panel — Preview */}
+      {/* Right panel — Preview or Batch Progress */}
       <div className="flex-1 bg-background">
-        <ResultPreview
-          currentImage={currentImage}
-          recentImages={recentImages}
-          isGenerating={isGenerating}
-          isUploading={isUploading}
-          onSelectImage={setCurrentImage}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onFavorite={handleFavorite}
-          onDownload={handleDownload}
-        />
+        {batchResults.length > 0 ? (
+          <BatchProgress
+            total={batchTotal}
+            completed={batchCompleted}
+            results={batchResults}
+            onCancel={handleBatchCancel}
+            onDone={handleBatchDone}
+            isDone={!isBatchRunning && batchCompleted === batchTotal}
+          />
+        ) : (
+          <ResultPreview
+            currentImage={currentImage}
+            recentImages={recentImages}
+            isGenerating={isGenerating}
+            isUploading={isUploading}
+            onSelectImage={setCurrentImage}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onFavorite={handleFavorite}
+            onDownload={handleDownload}
+          />
+        )}
       </div>
     </div>
   );
