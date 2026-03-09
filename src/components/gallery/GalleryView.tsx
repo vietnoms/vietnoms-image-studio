@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { type Workspace } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ interface GalleryViewProps {
 }
 
 export function GalleryView({ workspace }: GalleryViewProps) {
+  const router = useRouter();
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState<FilterStatus>("all");
@@ -754,6 +756,15 @@ export function GalleryView({ workspace }: GalleryViewProps) {
                       Archive
                     </button>
                   )}
+                  <button
+                    onClick={() => router.push(`/editor?image=${encodeURIComponent(selectedImage.url)}`)}
+                    className="px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                    </svg>
+                    Edit
+                  </button>
                   <a
                     href={selectedImage.url}
                     download={`image-${selectedImage.id}.png`}

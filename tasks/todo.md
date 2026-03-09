@@ -1,5 +1,30 @@
 # Current Tasks
 
+## Session: 2026-03-09 — Phase 4: Image Editing with Mask Painting
+
+- [x] Create `MaskCanvas.tsx` — HTML5 Canvas overlay for painting edit masks (paint/erase modes, custom brush cursor, white-on-black mask export)
+- [x] Integrate MaskCanvas into EditorView — Mask tool in toolbar, brush size/mode controls, mask overlay on images
+- [x] Update `/api/edit` route — pass `mask` field through to `editImage()` in Gemini
+- [x] Add Gallery → Editor flow — "Edit" button in gallery detail panel navigates to `/editor?image=<url>`
+- [x] Wrap EditorView in `<Suspense>` for `useSearchParams` support
+- [x] Build passes clean, dev server verified
+
+### What Changed
+- **Mask painting tool** — New "Mask" tool in Editor toolbar lets users paint a semi-transparent red overlay on specific regions of an image, then describe edits that apply only to that region
+- **Erase tool enhanced** — Erase tool now also activates the mask canvas for region-specific erasure
+- **Brush controls** — Properties panel shows Paint/Erase mode toggle, brush size slider (5-80px), and Clear Mask button when mask tool is active
+- **Gallery → Editor** — "Edit" button in gallery detail panel sends image URL to Editor via query param
+- **Gemini mask support** — Mask is exported as white-on-black PNG and passed to Gemini API for region-specific editing
+
+### Files Created (1)
+- `src/components/editor/MaskCanvas.tsx`
+
+### Files Modified (4)
+- `src/components/editor/EditorView.tsx` (mask tool, brush controls, query param loading)
+- `src/app/api/edit/route.ts` (mask passthrough)
+- `src/components/gallery/GalleryView.tsx` (Edit button)
+- `src/app/editor/page.tsx` (Suspense wrapper)
+
 ## Session: 2026-03-09 — Supabase Migration + Persistence Fix
 
 - [x] Create `supabase/migrations/002_pragmatic_stores.sql` — schema for menu_items, stored_images, templates tables
@@ -14,9 +39,9 @@
 - [x] Fix Google Drive token storage — migrated from filesystem to Vercel Blob (same pattern as Square)
 - [x] Cleanup old in-memory stores — strip to types-only (keep utility functions in templates.ts)
 - [x] Build passes clean (0 TypeScript errors)
-- [ ] **USER ACTION**: Run `002_pragmatic_stores.sql` in Supabase SQL Editor
-- [ ] **USER ACTION**: Add Supabase env vars to Vercel dashboard
-- [ ] Deploy to Vercel and verify persistence across page reloads
+- [x] Run `002_pragmatic_stores.sql` in Supabase SQL Editor
+- [x] Supabase env vars already configured on Vercel
+- [x] Deploy to Vercel and verify persistence — templates API returns 4 Vietnoms templates from DB
 
 ### What Changed
 - **All data now persists in Supabase PostgreSQL** — menu items, generated images, and templates survive serverless cold starts

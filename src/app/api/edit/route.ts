@@ -20,11 +20,13 @@ export async function POST(request: NextRequest) {
       imageMimeType = "image/png",
       instruction,
       workspace = "general",
+      mask,
     } = body as {
       imageBase64: string;
       imageMimeType?: string;
       instruction: string;
       workspace?: Workspace;
+      mask?: string;
     };
 
     if (!imageBase64) {
@@ -39,6 +41,7 @@ export async function POST(request: NextRequest) {
       imageBase64,
       imageMimeType,
       instruction,
+      ...(mask ? { mask } : {}),
     });
 
     // Save edited image to Vercel Blob storage

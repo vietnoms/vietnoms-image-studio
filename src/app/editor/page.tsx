@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { EditorView } from "@/components/editor/EditorView";
@@ -27,7 +27,9 @@ export default function EditorPage() {
           onDriveDisconnect={drive.disconnect}
         />
         <main className="flex-1 overflow-hidden">
-          <EditorView workspace={workspace} />
+          <Suspense>
+            <EditorView workspace={workspace} />
+          </Suspense>
         </main>
       </div>
     </div>

@@ -1,21 +1,24 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { type Workspace } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { MaskCanvas, type MaskCanvasHandle } from "./MaskCanvas";
 
 interface EditorViewProps {
   workspace: Workspace;
 }
 
-type EditorTool = "select" | "crop" | "text" | "erase" | "enhance";
+type EditorTool = "select" | "crop" | "text" | "erase" | "mask" | "enhance";
 
 const TOOLS: { key: EditorTool; label: string; icon: string }[] = [
   { key: "select", label: "Select", icon: "cursor" },
   { key: "crop", label: "Crop", icon: "crop" },
   { key: "text", label: "Text", icon: "text" },
   { key: "erase", label: "Erase", icon: "eraser" },
+  { key: "mask", label: "Mask", icon: "paintbrush" },
   { key: "enhance", label: "Enhance", icon: "sparkle" },
 ];
 
@@ -40,6 +43,11 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9.75 14.25 12m0 0 2.25 2.25M14.25 12l2.25-2.25M14.25 12 12 14.25m-2.58 4.92-6.374-6.375a1.125 1.125 0 0 1 0-1.59L9.42 4.83a1.125 1.125 0 0 1 1.59 0l6.375 6.375a1.125 1.125 0 0 1 0 1.59L10.83 19.17a1.125 1.125 0 0 1-1.59 0Z" />
     </svg>
   ),
+  paintbrush: (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
+    </svg>
+  ),
   sparkle: (
     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
@@ -53,10 +61,12 @@ const EDIT_PRESETS: Record<EditorTool, string[]> = {
   crop: [],
   text: ["Add a price tag showing $5.99", "Add 'NEW' label in the corner", "Add restaurant name watermark"],
   erase: ["Remove the background completely", "Remove all text from the image", "Remove the object in the center"],
+  mask: ["Replace the painted area with a wooden table", "Remove the painted area and fill naturally", "Change the painted area to a different color"],
   enhance: ["Make the colors more vibrant", "Increase sharpness and clarity", "Apply warm restaurant lighting", "Add subtle steam or heat effect", "Make the food look more appetizing"],
 };
 
 export function EditorView({ workspace }: EditorViewProps) {
+  const searchParams = useSearchParams();
   const [activeTool, setActiveTool] = useState<EditorTool>("select");
   const [loadedImage, setLoadedImage] = useState<string | null>(null);
   const [loadedFile, setLoadedFile] = useState<File | null>(null);
@@ -66,6 +76,30 @@ export function EditorView({ workspace }: EditorViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [editHistory, setEditHistory] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Mask state
+  const maskCanvasRef = useRef<MaskCanvasHandle>(null);
+  const [maskMode, setMaskMode] = useState<"paint" | "erase">("paint");
+  const [brushSize, setBrushSize] = useState(30);
+  const [hasMask, setHasMask] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState({ width: 800, height: 800 });
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+
+  const isMaskActive = activeTool === "mask" || activeTool === "erase";
+
+  // Load image from ?image= query param (Gallery → Editor flow)
+  useEffect(() => {
+    const imageUrl = searchParams.get("image");
+    if (imageUrl && !loadedImage) {
+      setLoadedImage(imageUrl);
+    }
+  }, [searchParams, loadedImage]);
+
+  // Track rendered image dimensions for mask canvas sizing
+  const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+  }, []);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -126,6 +160,9 @@ export function EditorView({ workspace }: EditorViewProps) {
         throw new Error("Failed to read image data");
       }
 
+      // Get mask data if mask canvas has content
+      const maskBase64 = hasMask ? maskCanvasRef.current?.getMaskBase64() : undefined;
+
       const response = await fetch("/api/edit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -134,6 +171,7 @@ export function EditorView({ workspace }: EditorViewProps) {
           imageMimeType: imageData.mimeType,
           instruction: editPrompt,
           workspace,
+          ...(maskBase64 ? { mask: maskBase64 } : {}),
         }),
       });
 
@@ -151,6 +189,9 @@ export function EditorView({ workspace }: EditorViewProps) {
 
       setEditedImage(data.image.url);
       setEditPrompt("");
+      // Clear mask after successful edit
+      maskCanvasRef.current?.clear();
+      setHasMask(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Edit failed");
     } finally {
@@ -229,7 +270,7 @@ export function EditorView({ workspace }: EditorViewProps) {
           <>
             {/* Canvas */}
             <div className="flex-1 flex items-center justify-center p-6 bg-background">
-              <div className="relative max-w-full max-h-full rounded-lg overflow-hidden border border-border shadow-lg">
+              <div ref={imageContainerRef} className="relative max-w-full max-h-full rounded-lg overflow-hidden border border-border shadow-lg">
                 <Image
                   src={displayImage}
                   alt="Editing"
@@ -237,6 +278,17 @@ export function EditorView({ workspace }: EditorViewProps) {
                   height={800}
                   className="object-contain max-h-[60vh] w-auto"
                   unoptimized
+                  onLoad={handleImageLoad}
+                />
+                {/* Mask canvas overlay */}
+                <MaskCanvas
+                  ref={maskCanvasRef}
+                  imageWidth={imageDimensions.width}
+                  imageHeight={imageDimensions.height}
+                  brushSize={brushSize}
+                  mode={activeTool === "erase" ? "paint" : maskMode}
+                  visible={isMaskActive && !isProcessing}
+                  onMaskChange={setHasMask}
                 />
                 {isProcessing && (
                   <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
@@ -250,6 +302,12 @@ export function EditorView({ workspace }: EditorViewProps) {
                 {editHistory.length > 0 && (
                   <div className="absolute top-3 left-3 px-2 py-0.5 rounded-full bg-primary/80 text-white text-[10px] font-medium">
                     {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""} applied
+                  </div>
+                )}
+                {/* Mask active indicator */}
+                {hasMask && (
+                  <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-red-500/80 text-white text-[10px] font-medium">
+                    Mask active
                   </div>
                 )}
               </div>
@@ -435,6 +493,96 @@ export function EditorView({ workspace }: EditorViewProps) {
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Mask / Erase tool properties */}
+        {isMaskActive && displayImage && (
+          <div className="space-y-3">
+            {activeTool === "mask" && (
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">
+                  Brush Mode
+                </label>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setMaskMode("paint")}
+                    className={cn(
+                      "flex-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                      maskMode === "paint"
+                        ? "bg-red-500/10 text-red-400 border border-red-500/30"
+                        : "bg-accent/50 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Paint
+                  </button>
+                  <button
+                    onClick={() => setMaskMode("erase")}
+                    className={cn(
+                      "flex-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                      maskMode === "erase"
+                        ? "bg-white/10 text-foreground border border-white/30"
+                        : "bg-accent/50 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Erase
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">
+                Brush Size: {brushSize}px
+              </label>
+              <input
+                type="range"
+                min={5}
+                max={80}
+                value={brushSize}
+                onChange={(e) => setBrushSize(Number(e.target.value))}
+                className="w-full accent-primary"
+              />
+              <div className="flex justify-between text-[9px] text-muted-foreground mt-0.5">
+                <span>5px</span>
+                <span>80px</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                maskCanvasRef.current?.clear();
+                setHasMask(false);
+              }}
+              disabled={!hasMask}
+              className="w-full px-3 py-2 rounded-md text-xs font-medium bg-accent/50 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-30"
+            >
+              Clear Mask
+            </button>
+
+            <div className="pt-2 border-t border-border">
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">
+                Quick Edits
+              </label>
+              <div className="space-y-1">
+                {EDIT_PRESETS[activeTool].map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => setEditPrompt(preset)}
+                    disabled={isProcessing}
+                    className="w-full text-left px-3 py-2 rounded-md text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors disabled:opacity-40"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              {activeTool === "mask"
+                ? "Paint over the area you want to edit, then describe the change in the prompt bar."
+                : "Paint over the area to erase, then type your erase instruction below."}
+            </p>
           </div>
         )}
 
