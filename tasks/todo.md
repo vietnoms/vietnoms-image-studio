@@ -57,6 +57,26 @@
 - [x] Build Editor page — image editing/adjustment
 - [x] Verify build and redeploy to Vercel
 
+## Session: 2026-03-08 — Phase 3: Gallery & Approval Enhancements
+
+- [x] Extend image-store.ts: `tags` field, `"archived"` status, `bulkUpdateImages`, `getTags`
+- [x] Gallery API: tag filter param, tags in PATCH, DELETE handler
+- [x] POST /api/images/bulk endpoint (approve/reject/archive/favorite/unfavorite)
+- [x] GET /api/tags endpoint (list unique tags per workspace)
+- [x] GalleryView: bulk selection mode with checkboxes + bulk action bar
+- [x] GalleryView: tag filter dropdown in header
+- [x] GalleryView: tag display/add/remove in detail panel
+- [x] GalleryView: "Archived" filter tab + archive button in detail panel
+- [x] Update addImage callers (generate + edit routes) with `tags: []`
+- [x] Build passes clean, dev server renders gallery correctly
+
+### Review
+- **Bulk selection**: "Select" toggle enters mode, checkboxes on each card, floating bar with Approve/Reject/Archive/Select All/Clear
+- **Tags**: Inline add/remove in detail panel, filter dropdown auto-appears when tags exist
+- **Archive**: Fourth status alongside pending/approved/rejected, dedicated filter tab in gallery
+- **API**: DELETE `/api/images?id=`, bulk POST `/api/images/bulk`, tag listing GET `/api/tags`
+- No console errors, all routes return 200, build passes cleanly
+
 ## Completed (Previous Sessions)
 
 - [x] Phase 1: Foundation (project setup, Gemini integration, studio UI)

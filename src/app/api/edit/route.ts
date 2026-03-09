@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
       model: result.model,
       costEstimate: IMAGE_COST_ESTIMATE.editing,
+      tags: [],
     });
 
     return NextResponse.json({

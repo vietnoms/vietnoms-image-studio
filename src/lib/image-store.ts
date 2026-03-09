@@ -7,12 +7,13 @@ export interface StoredImage {
   prompt: string;
   aspectRatio: string;
   workspace: Workspace;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "archived";
   isFavorite: boolean;
   createdAt: string;
   driveLink?: string | null;
   model?: string;
   costEstimate?: number;
+  tags: string[];
 }
 
 // ── In-memory store ─────────────────────────────────────────────────────
@@ -32,6 +33,7 @@ export function getImages(filters?: {
   workspace?: Workspace;
   status?: StoredImage["status"] | "favorites";
   search?: string;
+  tag?: string;
   limit?: number;
   offset?: number;
 }): { images: StoredImage[]; total: number } {
@@ -44,6 +46,9 @@ export function getImages(filters?: {
     filtered = filtered.filter((img) => img.isFavorite);
   } else if (filters?.status) {
     filtered = filtered.filter((img) => img.status === filters.status);
+  }
+  if (filters?.tag) {
+    filtered = filtered.filter((img) => img.tags.includes(filters.tag!));
   }
   if (filters?.search?.trim()) {
     const q = filters.search.toLowerCase();
@@ -67,10 +72,10 @@ export function getImageById(id: string): StoredImage | undefined {
   return images.find((img) => img.id === id);
 }
 
-/** Update an image (status, favorite, driveLink, etc.) */
+/** Update an image (status, favorite, driveLink, tags, etc.) */
 export function updateImage(
   id: string,
-  updates: Partial<Pick<StoredImage, "status" | "isFavorite" | "driveLink">>
+  updates: Partial<Pick<StoredImage, "status" | "isFavorite" | "driveLink" | "tags">>
 ): StoredImage | null {
   const img = images.find((i) => i.id === id);
   if (!img) return null;
@@ -85,12 +90,41 @@ export function deleteImage(id: string): boolean {
   return images.length < before;
 }
 
+/** Bulk update multiple images at once */
+export function bulkUpdateImages(
+  ids: string[],
+  updates: Partial<Pick<StoredImage, "status" | "isFavorite">>
+): { updated: number; images: StoredImage[] } {
+  const updatedImages: StoredImage[] = [];
+  for (const id of ids) {
+    const img = images.find((i) => i.id === id);
+    if (img) {
+      Object.assign(img, updates);
+      updatedImages.push(img);
+    }
+  }
+  return { updated: updatedImages.length, images: updatedImages };
+}
+
+/** Get all unique tags for a workspace (or all workspaces) */
+export function getTags(workspace?: Workspace): string[] {
+  const source = workspace
+    ? images.filter((i) => i.workspace === workspace)
+    : images;
+  const tagSet = new Set<string>();
+  for (const img of source) {
+    for (const t of img.tags) tagSet.add(t);
+  }
+  return [...tagSet].sort();
+}
+
 /** Get stats for a workspace */
 export function getStats(workspace: Workspace): {
   total: number;
   approved: number;
   pending: number;
   rejected: number;
+  archived: number;
   favorites: number;
 } {
   const ws = images.filter((img) => img.workspace === workspace);
@@ -99,6 +133,7 @@ export function getStats(workspace: Workspace): {
     approved: ws.filter((i) => i.status === "approved").length,
     pending: ws.filter((i) => i.status === "pending").length,
     rejected: ws.filter((i) => i.status === "rejected").length,
+    archived: ws.filter((i) => i.status === "archived").length,
     favorites: ws.filter((i) => i.isFavorite).length,
   };
 }
