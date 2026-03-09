@@ -1,9 +1,11 @@
-import fs from "fs/promises";
-import path from "path";
+import { put, list, del } from "@vercel/blob";
 
-const TOKEN_PATH = path.join(process.cwd(), ".square-token.json");
 const BASE_URL = "https://connect.squareup.com";
 const API_URL = "https://connect.squareup.com/v2";
+const BLOB_TOKEN_PATH = "config/square-token.json";
+
+// In-memory cache so repeated reads within the same serverless invocation are fast
+let cachedTokens: SquareTokens | null = null;
 
 // --- Types ---
 
@@ -120,27 +122,58 @@ export async function disconnectSquare(): Promise<void> {
     }
   }
 
-  // Delete token file
-  try {
-    await fs.unlink(TOKEN_PATH);
-  } catch {
-    // File may not exist
-  }
+  // Delete stored tokens
+  await deleteTokens();
 }
 
-// --- Token management ---
+// --- Token management (Vercel Blob + in-memory cache) ---
 
 async function saveTokens(tokens: SquareTokens): Promise<void> {
-  await fs.writeFile(TOKEN_PATH, JSON.stringify(tokens, null, 2), "utf-8");
+  cachedTokens = tokens;
+
+  // Delete any existing blob at this path first
+  try {
+    const { blobs } = await list({ prefix: BLOB_TOKEN_PATH });
+    for (const blob of blobs) {
+      await del(blob.url);
+    }
+  } catch { /* no existing blob */ }
+
+  await put(BLOB_TOKEN_PATH, JSON.stringify(tokens), {
+    access: "public",
+    addRandomSuffix: false,
+    contentType: "application/json",
+  });
 }
 
 async function loadTokens(): Promise<SquareTokens | null> {
+  if (cachedTokens) return cachedTokens;
+
   try {
-    const data = await fs.readFile(TOKEN_PATH, "utf-8");
-    return JSON.parse(data);
+    const { blobs } = await list({ prefix: BLOB_TOKEN_PATH });
+    if (blobs.length > 0) {
+      const response = await fetch(blobs[0].url);
+      if (response.ok) {
+        const tokens = await response.json();
+        cachedTokens = tokens;
+        return tokens;
+      }
+    }
   } catch {
-    return null;
+    // Blob read failed
   }
+
+  return null;
+}
+
+async function deleteTokens(): Promise<void> {
+  cachedTokens = null;
+  try {
+    const { blobs } = await list({ prefix: BLOB_TOKEN_PATH });
+    for (const blob of blobs) {
+      await del(blob.url);
+    }
+  } catch { /* ignore */ }
 }
 
 async function getAccessToken(): Promise<string> {
@@ -169,9 +202,7 @@ async function getAccessToken(): Promise<string> {
 
     if (!response.ok) {
       // Refresh failed — clear tokens and force re-auth
-      try {
-        await fs.unlink(TOKEN_PATH);
-      } catch { /* ignore */ }
+      await deleteTokens();
       throw new Error("Square token expired. Please reconnect.");
     }
 
