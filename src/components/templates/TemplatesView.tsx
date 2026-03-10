@@ -335,6 +335,11 @@ export function TemplatesView({ workspace }: TemplatesViewProps) {
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium capitalize">
                           {tpl.category}
                         </span>
+                        {tpl.is_premium && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-medium">
+                            Premium
+                          </span>
+                        )}
                         <span className="text-[10px] text-muted-foreground">
                           {ASPECT_RATIOS[tpl.aspect_ratio]?.label || tpl.aspect_ratio}
                         </span>

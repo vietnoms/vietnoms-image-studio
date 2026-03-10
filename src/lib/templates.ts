@@ -11,6 +11,8 @@ export interface Template {
   aspect_ratio: AspectRatio;
   style_preset: string;
   usage_count: number;
+  is_premium: boolean;
+  source_image_url: string;
   created_at: string;
   updated_at: string;
 }

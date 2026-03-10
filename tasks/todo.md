@@ -1,5 +1,25 @@
 # Current Tasks
 
+## Session: 2026-03-09 — Phase 7: Smart Variations
+
+- [x] Add `VARIATION_HINTS` constant — composition hints for diverse outputs
+- [x] Add `variationCount` state (1-4, default 1)
+- [x] Add variation count selector UI (after Aspect Ratio, before Batch toggle)
+- [x] Add cost estimate display when variations > 1
+- [x] Implement `handleGenerateVariations()` — sequential generation with hints
+- [x] Update Generate button text: "Generate" → "Generate N Variations"
+- [x] Build passes clean, Studio page loads, UI verified
+
+### What Changed
+- **Variation selector** — 4-button toggle (1-4) appears below Aspect Ratio controls
+- **Composition hints** — Each variation beyond the first appends a different angle/perspective hint to the prompt (alternative angle, overhead, close-up)
+- **Cost estimate** — Shows "N variations × $0.18 = $X.XX estimated" when count > 1
+- **Reuses batch progress** — Same `BatchProgress` component, `batchResults`/`batchTotal` state, cancel/done flow
+- **Batch mode override** — Variations hidden when batch mode is active (batch = one per item)
+
+### Files Modified (1)
+- `src/components/studio/GeneratePanel.tsx` (+160 lines: VARIATION_HINTS, variationCount state, handleGenerateVariations, UI)
+
 ## Session: 2026-03-09 — Phase 6: Batch Export/Download
 
 - [x] Install `archiver` + `@types/archiver`

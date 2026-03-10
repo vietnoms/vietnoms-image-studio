@@ -37,6 +37,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       aspect_ratio,
       style_preset,
       workspace,
+      is_premium,
+      source_image_url,
     } = body as {
       name?: string;
       category?: string;
@@ -45,6 +47,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       aspect_ratio?: AspectRatio;
       style_preset?: string;
       workspace?: Workspace;
+      is_premium?: boolean;
+      source_image_url?: string;
     };
 
     const updates: Record<string, unknown> = {};
@@ -55,6 +59,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (aspect_ratio !== undefined) updates.aspect_ratio = aspect_ratio;
     if (style_preset !== undefined) updates.style_preset = style_preset;
     if (workspace !== undefined) updates.workspace = workspace;
+    if (is_premium !== undefined) updates.is_premium = is_premium;
+    if (source_image_url !== undefined) updates.source_image_url = source_image_url;
 
     const template = await updateTemplate(id, updates);
 

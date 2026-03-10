@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { workspace, name, category, prompt_text, negative_prompt, aspect_ratio, style_preset } =
+    const { workspace, name, category, prompt_text, negative_prompt, aspect_ratio, style_preset, is_premium, source_image_url } =
       body as {
         workspace: Workspace;
         name: string;
@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
         negative_prompt?: string;
         aspect_ratio?: AspectRatio;
         style_preset?: string;
+        is_premium?: boolean;
+        source_image_url?: string;
       };
 
     if (!workspace || !name || !prompt_text) {
@@ -48,6 +50,8 @@ export async function POST(request: NextRequest) {
       negative_prompt: negative_prompt || "",
       aspect_ratio: aspect_ratio || "1:1",
       style_preset: style_preset || "",
+      is_premium: is_premium ?? false,
+      source_image_url: source_image_url || "",
     });
 
     return NextResponse.json({ template }, { status: 201 });

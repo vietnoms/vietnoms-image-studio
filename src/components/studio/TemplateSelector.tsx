@@ -108,7 +108,14 @@ export function TemplateSelector({
                       }
                     `}
                   >
-                    <div className="font-medium truncate text-foreground">{tpl.name}</div>
+                    <div className="font-medium truncate text-foreground flex items-center gap-1.5">
+                      {tpl.name}
+                      {tpl.is_premium && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-500 font-medium shrink-0">
+                          PRO
+                        </span>
+                      )}
+                    </div>
                     {vars.length > 0 && (
                       <div className="text-muted-foreground mt-0.5 truncate text-[10px]">
                         {vars.map((v) => variableToLabel(v)).join(", ")}

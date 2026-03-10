@@ -80,6 +80,8 @@ export async function duplicateTemplate(id: string): Promise<Template | null> {
     negative_prompt: source.negative_prompt,
     aspect_ratio: source.aspect_ratio as AspectRatio,
     style_preset: source.style_preset,
+    is_premium: source.is_premium,
+    source_image_url: source.source_image_url,
   });
 }
 
