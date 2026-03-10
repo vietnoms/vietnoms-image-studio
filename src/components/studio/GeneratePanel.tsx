@@ -13,6 +13,13 @@ import { type Template, fillTemplate, extractVariables } from "@/lib/templates";
 import { type MenuItem } from "@/lib/menu-items";
 import { cn } from "@/lib/utils";
 
+const VARIATION_HINTS = [
+  "", // first variation = original prompt unchanged
+  "\n\nShot from a different angle, alternative composition.",
+  "\n\nOverhead view, bird's eye perspective.",
+  "\n\nClose-up detail shot with shallow depth of field.",
+];
+
 interface GeneratePanelProps {
   workspace: Workspace;
   onCostUpdate: (cost: number) => void;
@@ -47,6 +54,9 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
   const [batchTotal, setBatchTotal] = useState(0);
   const [batchCompleted, setBatchCompleted] = useState(0);
   const batchCancelledRef = useRef(false);
+
+  // Variation state
+  const [variationCount, setVariationCount] = useState(1);
 
   // When a template is selected, adopt its aspect ratio and negative prompt
   const handleSelectTemplate = useCallback(
@@ -468,6 +478,118 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
     setIsBatchRunning(false);
   };
 
+  // Generate N variations of the same prompt with composition hints
+  const handleGenerateVariations = async () => {
+    const basePrompt = buildFinalPrompt();
+    if (!basePrompt) return;
+
+    batchCancelledRef.current = false;
+    setIsBatchRunning(true);
+    setBatchTotal(variationCount);
+    setBatchCompleted(0);
+    setError(null);
+
+    const initialResults: BatchResult[] = Array.from(
+      { length: variationCount },
+      (_, i) => ({
+        itemId: `variation-${i + 1}`,
+        itemName: `Variation ${i + 1}`,
+        status: "pending" as const,
+      })
+    );
+    setBatchResults(initialResults);
+
+    // Collect reference images once for all variations
+    const referenceImages = await collectReferenceImages();
+    let completedCount = 0;
+
+    for (let i = 0; i < variationCount; i++) {
+      if (batchCancelledRef.current) break;
+
+      setBatchResults((prev) =>
+        prev.map((r, idx) =>
+          idx === i ? { ...r, status: "generating" as const } : r
+        )
+      );
+
+      try {
+        const varPrompt = basePrompt + VARIATION_HINTS[i];
+
+        if (batchCancelledRef.current) break;
+
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: varPrompt,
+            negativePrompt: negativePrompt.trim() || undefined,
+            aspectRatio,
+            workspace,
+            templateId: selectedTemplate?.id,
+            referenceImages:
+              referenceImages.length > 0 ? referenceImages : undefined,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Generation failed");
+        }
+
+        const newImage: GeneratedImage = {
+          id: data.image.id,
+          url: data.image.url,
+          prompt: varPrompt,
+          aspectRatio,
+          createdAt: new Date().toISOString(),
+          status: "pending",
+        };
+
+        completedCount++;
+        setBatchCompleted(completedCount);
+        setBatchResults((prev) =>
+          prev.map((r, idx) =>
+            idx === i ? { ...r, status: "done" as const, image: newImage } : r
+          )
+        );
+
+        setRecentImages((prev) => [newImage, ...prev].slice(0, 20));
+
+        if (data.image.costEstimate) {
+          onCostUpdate(data.image.costEstimate);
+        }
+      } catch (err) {
+        completedCount++;
+        setBatchCompleted(completedCount);
+        setBatchResults((prev) =>
+          prev.map((r, idx) =>
+            idx === i
+              ? {
+                  ...r,
+                  status: "error" as const,
+                  error: err instanceof Error ? err.message : "Failed",
+                }
+              : r
+          )
+        );
+      }
+    }
+
+    if (batchCancelledRef.current) {
+      setBatchResults((prev) =>
+        prev.map((r) =>
+          r.status === "pending"
+            ? { ...r, status: "error" as const, error: "Cancelled" }
+            : r
+        )
+      );
+      setBatchCompleted(variationCount);
+    }
+
+    setIsBatchRunning(false);
+  };
+
   const handleBatchCancel = () => {
     batchCancelledRef.current = true;
   };
@@ -536,6 +658,42 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
           onAspectRatioChange={setAspectRatio}
         />
 
+        {/* Variation count (hidden in batch mode) */}
+        {!isBatchMode && (
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Variations
+            </label>
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setVariationCount(n)}
+                  className={cn(
+                    "flex-1 h-8 rounded-lg border text-sm font-medium transition-colors",
+                    variationCount === n
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border hover:border-primary/30 text-muted-foreground"
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Variation cost estimate */}
+        {!isBatchMode && variationCount > 1 && (
+          <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/20 text-xs text-muted-foreground">
+            <span className="text-foreground font-medium">{variationCount} variations</span>
+            {" × $"}{IMAGE_COST_ESTIMATE.generation.toFixed(2)}
+            {" = "}
+            <span className="text-primary font-medium">${(variationCount * IMAGE_COST_ESTIMATE.generation).toFixed(2)}</span>
+            {" estimated"}
+          </div>
+        )}
+
         {/* Batch mode toggle */}
         {workspace !== "general" && selectedItems.length >= 2 && selectedTemplate && (
           <div className="flex items-center justify-between py-1">
@@ -583,7 +741,7 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
             </button>
           ) : (
             <button
-              onClick={handleGenerate}
+              onClick={variationCount > 1 ? handleGenerateVariations : handleGenerate}
               disabled={!canGenerate()}
               className="w-full h-10 rounded-lg text-sm font-medium text-white transition-all duration-200 gradient-primary hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 glow-sm flex items-center justify-center gap-2"
             >
@@ -615,7 +773,7 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
                   </svg>
-                  Generate
+                  {variationCount > 1 ? `Generate ${variationCount} Variations` : "Generate"}
                 </>
               )}
             </button>
