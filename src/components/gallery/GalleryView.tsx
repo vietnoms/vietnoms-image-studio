@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { type Workspace } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { ExportDialog } from "./ExportDialog";
 
 interface GalleryImage {
   id: string;
@@ -46,6 +47,7 @@ export function GalleryView({ workspace }: GalleryViewProps) {
   // Selection mode
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   // Tags
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -416,6 +418,15 @@ export function GalleryView({ workspace }: GalleryViewProps) {
           >
             Archive
           </button>
+          <button
+            onClick={() => setShowExportDialog(true)}
+            className="px-2.5 py-1 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Export
+          </button>
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={selectAllVisible}
@@ -765,6 +776,18 @@ export function GalleryView({ workspace }: GalleryViewProps) {
                     </svg>
                     Edit
                   </button>
+                  <button
+                    onClick={() => {
+                      setSelectedIds(new Set([selectedImage.id]));
+                      setShowExportDialog(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    Export
+                  </button>
                   <a
                     href={selectedImage.url}
                     download={`image-${selectedImage.id}.png`}
@@ -778,6 +801,13 @@ export function GalleryView({ workspace }: GalleryViewProps) {
           </div>
         )}
       </div>
+
+      <ExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        selectedIds={selectedIds}
+        imageCount={selectedIds.size}
+      />
     </div>
   );
 }

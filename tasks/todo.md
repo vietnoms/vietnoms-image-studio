@@ -1,5 +1,28 @@
 # Current Tasks
 
+## Session: 2026-03-09 — Phase 6: Batch Export/Download
+
+- [x] Install `archiver` + `@types/archiver`
+- [x] Create `/api/images/export` route — ZIP streaming with sharp format conversion
+- [x] Create `ExportDialog.tsx` — format/quality/resolution options dialog
+- [x] Wire Export into GalleryView — bulk action bar + detail panel buttons
+- [x] Build passes clean, Gallery page loads without errors
+
+### What Changed
+- **Batch export** — Select images in Gallery, click Export, choose format (PNG/JPEG/WebP), quality, and resolution (Original/Medium/Thumbnail), download as ZIP
+- **ZIP streaming** — Server-side `archiver` streams ZIP without buffering in memory, processes images in parallel batches of 5
+- **Format conversion** — `sharp` handles PNG→JPEG/WebP conversion with configurable quality
+- **Resolution presets** — Original (full), Medium (50%), Thumbnail (200px max)
+- **Dual entry points** — Export from bulk action bar (multi-select) or from detail panel (single image)
+
+### Files Created (2)
+- `src/app/api/images/export/route.ts`
+- `src/components/gallery/ExportDialog.tsx`
+
+### Files Modified (2)
+- `src/components/gallery/GalleryView.tsx` (Export buttons, dialog state)
+- `package.json` (archiver dependency)
+
 ## Session: 2026-03-09 — Website Media Integration
 
 - [x] Add `VIETNOMS_SITE_URL` + `MEDIA_INGEST_KEY` env vars
