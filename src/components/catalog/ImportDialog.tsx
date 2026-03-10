@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import {
   Dialog,
@@ -791,31 +791,114 @@ function SquareImportTab({
   const [fetched, setFetched] = useState(false);
   const [sortColumn, setSortColumn] = useState<"name" | "price" | "category" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  // Duplicate detection
+  const [existingNames, setExistingNames] = useState<Set<string>>(new Set());
+  const isAlreadyImported = useCallback(
+    (name: string) => existingNames.has(name.trim().toLowerCase()),
+    [existingNames]
+  );
+
+  // Category visibility filter (which categories to show)
+  const [visibleCategories, setVisibleCategories] = useState<Set<string>>(new Set());
+
+  // Selection (indices of items chosen for import)
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
 
   const categories = useMemo(() => {
     const cats = new Set(items.map(i => i.category || "Uncategorized"));
     return Array.from(cats).sort();
   }, [items]);
 
-  const displayItems = useMemo(() => {
-    let result = items.map((item, idx) => ({ ...item, _idx: idx }));
-    if (categoryFilter !== "all") {
-      result = result.filter(i => (i.category || "Uncategorized") === categoryFilter);
-    }
+  // Stats
+  const alreadyImportedCount = useMemo(
+    () => items.filter(i => isAlreadyImported(i.name)).length,
+    [items, isAlreadyImported]
+  );
+  const selectedNewCount = useMemo(
+    () => items.filter((item, i) => selectedIndices.has(i) && !isAlreadyImported(item.name)).length,
+    [items, selectedIndices, isAlreadyImported]
+  );
+
+  // Group visible items by category
+  const groupedItems = useMemo(() => {
+    const indexed = items.map((item, idx) => ({ ...item, _idx: idx }));
+    const visible = indexed.filter(i =>
+      visibleCategories.has(i.category || "Uncategorized")
+    );
+
+    // Sort within groups if sort column set
     if (sortColumn) {
-      result.sort((a, b) => {
+      visible.sort((a, b) => {
         const aVal = (a[sortColumn] || "").toLowerCase();
         const bVal = (b[sortColumn] || "").toLowerCase();
         return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       });
     }
-    return result;
-  }, [items, categoryFilter, sortColumn, sortDir]);
+
+    // Group by category
+    const groups: { category: string; items: typeof visible }[] = [];
+    const catOrder = [...new Set(visible.map(i => i.category || "Uncategorized"))].sort();
+    for (const cat of catOrder) {
+      groups.push({
+        category: cat,
+        items: visible.filter(i => (i.category || "Uncategorized") === cat),
+      });
+    }
+    return groups;
+  }, [items, visibleCategories, sortColumn, sortDir]);
 
   const toggleSort = (col: "name" | "price" | "category") => {
     if (sortColumn === col) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortColumn(col); setSortDir("asc"); }
+  };
+
+  const toggleCategoryVisibility = (cat: string) => {
+    setVisibleCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
+  const toggleItemSelection = (idx: number) => {
+    if (isAlreadyImported(items[idx].name)) return;
+    setSelectedIndices(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const toggleCategorySelection = (cat: string) => {
+    const catIndices = items
+      .map((item, i) => ({ item, i }))
+      .filter(({ item }) => (item.category || "Uncategorized") === cat && !isAlreadyImported(item.name))
+      .map(({ i }) => i);
+
+    const allSelected = catIndices.every(i => selectedIndices.has(i));
+    setSelectedIndices(prev => {
+      const next = new Set(prev);
+      for (const i of catIndices) {
+        if (allSelected) next.delete(i);
+        else next.add(i);
+      }
+      return next;
+    });
+  };
+
+  const getCategorySelectionState = (cat: string): "all" | "none" | "some" => {
+    const catNewIndices = items
+      .map((item, i) => ({ item, i }))
+      .filter(({ item }) => (item.category || "Uncategorized") === cat && !isAlreadyImported(item.name))
+      .map(({ i }) => i);
+    if (catNewIndices.length === 0) return "none";
+    const selectedCount = catNewIndices.filter(i => selectedIndices.has(i)).length;
+    if (selectedCount === 0) return "none";
+    if (selectedCount === catNewIndices.length) return "all";
+    return "some";
   };
 
   const handleFetch = async () => {
@@ -823,22 +906,44 @@ function SquareImportTab({
     setError(null);
 
     try {
-      const res = await fetch("/api/menu-items/square");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to fetch catalog");
+      // Fetch Square items + existing catalog in parallel
+      const [squareRes, catalogRes] = await Promise.all([
+        fetch("/api/menu-items/square"),
+        fetch(`/api/menu-items?workspace=${workspace}`),
+      ]);
 
-      setItems(data.items || []);
-      setImageMap(data.images || {});
+      const squareData = await squareRes.json();
+      if (!squareRes.ok) throw new Error(squareData.error || "Failed to fetch catalog");
+
+      const catalogData = await catalogRes.json();
+      const existing = new Set<string>(
+        (catalogData.items || []).map((i: { name: string }) => i.name.trim().toLowerCase())
+      );
+
+      const fetchedItems: ParsedMenuItem[] = squareData.items || [];
+
+      setItems(fetchedItems);
+      setImageMap(squareData.images || {});
+      setExistingNames(existing);
       setFetched(true);
+
+      // Show all categories by default
+      const allCats = new Set(fetchedItems.map(i => i.category || "Uncategorized"));
+      setVisibleCategories(allCats);
+
+      // Auto-select all non-duplicate items
+      const initialSelected = new Set<number>();
+      fetchedItems.forEach((item, i) => {
+        if (!existing.has(item.name.trim().toLowerCase())) {
+          initialSelected.add(i);
+        }
+      });
+      setSelectedIndices(initialSelected);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch catalog");
     } finally {
       setIsFetching(false);
     }
-  };
-
-  const handleRemoveItem = (index: number) => {
-    setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleEditItem = (index: number, field: keyof ParsedMenuItem, value: string) => {
@@ -848,9 +953,9 @@ function SquareImportTab({
   };
 
   const handleImport = async () => {
-    const toImport = categoryFilter !== "all"
-      ? displayItems.map(({ _idx, ...rest }) => rest)
-      : items;
+    const toImport = items.filter(
+      (item, i) => selectedIndices.has(i) && !isAlreadyImported(item.name)
+    );
     if (toImport.length === 0) return;
     setIsImporting(true);
     setError(null);
@@ -959,7 +1064,7 @@ function SquareImportTab({
     );
   }
 
-  // State C: Items fetched — show editable preview table
+  // State C: Items fetched — show grouped table with checkboxes
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -991,24 +1096,20 @@ function SquareImportTab({
           </Button>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {/* Header */}
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-sm font-medium shrink-0">
-              Found {items.length} items from Square
-            </h4>
+            <div>
+              <h4 className="text-sm font-medium">
+                Found {items.length} items from Square
+                {alreadyImportedCount > 0 && (
+                  <span className="text-muted-foreground font-normal">
+                    {" "}· {alreadyImportedCount} already in catalog
+                  </span>
+                )}
+              </h4>
+            </div>
             <div className="flex items-center gap-2">
-              {categories.length > 1 && (
-                <select
-                  value={categoryFilter}
-                  onChange={e => setCategoryFilter(e.target.value)}
-                  className="h-8 rounded-md border border-border bg-background px-2 text-xs"
-                >
-                  <option value="all">All Categories</option>
-                  {categories.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -1020,20 +1121,42 @@ function SquareImportTab({
               <Button
                 size="sm"
                 onClick={handleImport}
-                disabled={isImporting}
+                disabled={isImporting || selectedNewCount === 0}
               >
                 {isImporting
                   ? "Importing..."
-                  : `Import ${categoryFilter !== "all" ? `${displayItems.length} Filtered` : `All (${items.length})`}`}
+                  : `Import ${selectedNewCount} Selected`}
               </Button>
             </div>
           </div>
 
+          {/* Category visibility filter */}
+          {categories.length > 1 && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              <span className="text-xs text-muted-foreground py-0.5">Show:</span>
+              {categories.map(cat => (
+                <label key={cat} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={visibleCategories.has(cat)}
+                    onChange={() => toggleCategoryVisibility(cat)}
+                    className="rounded border-border h-3.5 w-3.5"
+                  />
+                  <span className={visibleCategories.has(cat) ? "text-foreground" : "text-muted-foreground"}>
+                    {cat}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {/* Grouped item table */}
           <div className="border border-border rounded-lg overflow-auto max-h-[50vh]">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50 sticky top-0">
+              <thead className="bg-muted/50 sticky top-0 z-10">
                 <tr>
-                  {(["name", "price", "category"] as const).map(col => (
+                  <th className="px-3 py-1.5 w-8" />
+                  {(["name", "price"] as const).map(col => (
                     <th
                       key={col}
                       onClick={() => toggleSort(col)}
@@ -1045,49 +1168,97 @@ function SquareImportTab({
                       )}
                     </th>
                   ))}
-                  <th className="px-3 py-1.5 w-8" />
                 </tr>
               </thead>
               <tbody>
-                {displayItems.map(item => (
-                  <tr key={item._idx} className="border-t border-border">
-                    <td className="px-3 py-1.5">
-                      <input
-                        value={item.name}
-                        onChange={(e) =>
-                          handleEditItem(item._idx, "name", e.target.value)
-                        }
-                        className="bg-transparent w-full text-sm focus:outline-none"
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <input
-                        value={item.price || ""}
-                        onChange={(e) =>
-                          handleEditItem(item._idx, "price", e.target.value)
-                        }
-                        className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <input
-                        value={item.category || ""}
-                        onChange={(e) =>
-                          handleEditItem(item._idx, "category", e.target.value)
-                        }
-                        className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <button
-                        onClick={() => handleRemoveItem(item._idx)}
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        &times;
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {groupedItems.map(group => {
+                  const catState = getCategorySelectionState(group.category);
+                  const catNewCount = group.items.filter(i => !isAlreadyImported(i.name)).length;
+                  const catExistingCount = group.items.length - catNewCount;
+
+                  return (
+                    <CategoryGroup key={group.category}>
+                      {/* Category header row */}
+                      <tr className="bg-muted/30 border-t border-border">
+                        <td className="px-3 py-1.5">
+                          <IndeterminateCheckbox
+                            checked={catState === "all"}
+                            indeterminate={catState === "some"}
+                            disabled={catNewCount === 0}
+                            onChange={() => toggleCategorySelection(group.category)}
+                            className="h-3.5 w-3.5"
+                          />
+                        </td>
+                        <td colSpan={2} className="px-3 py-1.5">
+                          <button
+                            onClick={() => catNewCount > 0 && toggleCategorySelection(group.category)}
+                            className="text-xs font-medium text-foreground hover:text-primary transition-colors text-left"
+                            disabled={catNewCount === 0}
+                          >
+                            {group.category}
+                            <span className="text-muted-foreground font-normal ml-1.5">
+                              — import all from this category
+                              ({catNewCount} new{catExistingCount > 0 ? `, ${catExistingCount} already imported` : ""})
+                            </span>
+                          </button>
+                        </td>
+                      </tr>
+                      {/* Item rows */}
+                      {group.items.map(item => {
+                        const imported = isAlreadyImported(item.name);
+                        return (
+                          <tr
+                            key={item._idx}
+                            className={`border-t border-border/50 ${imported ? "opacity-40" : ""}`}
+                          >
+                            <td className="px-3 py-1">
+                              <input
+                                type="checkbox"
+                                checked={!imported && selectedIndices.has(item._idx)}
+                                disabled={imported}
+                                onChange={() => toggleItemSelection(item._idx)}
+                                className="rounded border-border h-3.5 w-3.5"
+                              />
+                            </td>
+                            <td className="px-3 py-1">
+                              <div className="flex items-center gap-2">
+                                {imported ? (
+                                  <span className="text-sm text-muted-foreground">
+                                    {item.name}
+                                    <span className="text-[10px] ml-1.5 text-muted-foreground/60 italic">
+                                      (already in catalog)
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <input
+                                    value={item.name}
+                                    onChange={(e) =>
+                                      handleEditItem(item._idx, "name", e.target.value)
+                                    }
+                                    className="bg-transparent w-full text-sm focus:outline-none"
+                                  />
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-1">
+                              {imported ? (
+                                <span className="text-sm text-muted-foreground">{item.price || ""}</span>
+                              ) : (
+                                <input
+                                  value={item.price || ""}
+                                  onChange={(e) =>
+                                    handleEditItem(item._idx, "price", e.target.value)
+                                  }
+                                  className="bg-transparent w-full text-sm focus:outline-none text-muted-foreground"
+                                />
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </CategoryGroup>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1108,5 +1279,42 @@ function SquareImportTab({
         </div>
       )}
     </div>
+  );
+}
+
+/** Wrapper to group category rows (just passes children through) */
+function CategoryGroup({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+/** Checkbox that supports the indeterminate state */
+function IndeterminateCheckbox({
+  checked,
+  indeterminate,
+  disabled,
+  onChange,
+  className,
+}: {
+  checked: boolean;
+  indeterminate: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+  className?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = indeterminate;
+    }
+  }, [indeterminate]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      className={`rounded border-border ${className || ""}`}
+    />
   );
 }

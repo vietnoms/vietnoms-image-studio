@@ -1,5 +1,60 @@
 # Current Tasks
 
+## Session: 2026-03-09 — Square POS Import UX Improvements
+
+- [x] Fetch existing catalog items alongside Square fetch for duplicate detection
+- [x] Replace category dropdown with checkbox filter row
+- [x] Replace X buttons with selection checkboxes + greyed-out duplicates
+- [x] Group items by category with "import all" header checkboxes
+- [x] Update import handler and button to use selection
+- [x] Build passes clean
+
+### What Changed
+- **Duplicate detection** — On Square fetch, existing catalog items are fetched in parallel. Already-imported items are greyed out (opacity-40) with disabled checkboxes and "(already in catalog)" label
+- **Category checkboxes** — Category filter is now a row of checkboxes (show/hide). Toggling visibility does NOT change item selection
+- **Item selection** — Each item has a checkbox. New items are auto-selected on fetch. Already-imported items can't be selected
+- **Category "import all"** — Each category has a header row with an indeterminate checkbox + "import all from this category" label. Toggles all new items in that category
+- **Import button** — Shows "Import N Selected" count based on checked new items, disabled when 0
+
+### Files Modified (1)
+- `src/components/catalog/ImportDialog.tsx` — SquareImportTab rewritten: new state (existingNames, visibleCategories, selectedIndices), grouped table rendering, IndeterminateCheckbox helper component
+
+## Session: 2026-03-09 — Screenshot-to-Template Builder + Premium Flags
+
+- [x] Create `003_template_builder.sql` — add `is_premium` + `source_image_url` columns
+- [x] Update `Template` interface with new fields
+- [x] Update `duplicateTemplate()` in DB layer to copy new fields
+- [x] Update POST + PUT API routes for `is_premium` + `source_image_url`
+- [x] Create `src/lib/template-analyze.ts` — Gemini vision analysis → structured template
+- [x] Create `/api/templates/analyze` route — screenshot analysis endpoint
+- [x] Create `/template-builder` page + `TemplateBuilderView.tsx` — 4-step wizard (Upload → Analyzing → Preview/Edit → Saved)
+- [x] Add Builder to Sidebar navigation with camera icon
+- [x] Add premium badges to TemplatesView + TemplateSelector
+- [x] Build passes clean, committed + pushed
+- [x] Run `003_template_builder.sql` in Supabase SQL Editor ✓
+
+### What Changed
+- **Screenshot-to-Template Builder** — New `/template-builder` page with drag-drop screenshot upload → Gemini AI analysis → editable template form → save
+- **AI Analysis** — Gemini 2.0 Flash analyzes visual style, composition, lighting, colors, text overlays, food styling, background, mood and generates a reusable prompt template with `{variable}` placeholders
+- **Premium flags** — Templates now have `is_premium` boolean. Amber "Premium" badge on Templates page, "PRO" badge in Studio template selector
+- **Source image tracking** — Templates created from screenshots store the original screenshot URL
+
+### Files Created (4)
+- `supabase/migrations/003_template_builder.sql`
+- `src/lib/template-analyze.ts`
+- `src/app/api/templates/analyze/route.ts`
+- `src/app/template-builder/page.tsx`
+- `src/components/template-builder/TemplateBuilderView.tsx`
+
+### Files Modified (7)
+- `src/lib/templates.ts` (Template interface)
+- `src/lib/db/templates.ts` (duplicateTemplate)
+- `src/app/api/templates/route.ts` (POST handler)
+- `src/app/api/templates/[id]/route.ts` (PUT handler)
+- `src/components/layout/Sidebar.tsx` (nav + icon)
+- `src/components/templates/TemplatesView.tsx` (premium badge)
+- `src/components/studio/TemplateSelector.tsx` (premium badge)
+
 ## Session: 2026-03-09 — Phase 7: Smart Variations
 
 - [x] Add `VARIATION_HINTS` constant — composition hints for diverse outputs
