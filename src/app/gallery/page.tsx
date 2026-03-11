@@ -1,35 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { TopBar } from "@/components/layout/TopBar";
+import { AppShell } from "@/components/layout/AppShell";
 import { GalleryView } from "@/components/gallery/GalleryView";
-import { useGoogleDrive } from "@/hooks/useGoogleDrive";
-import { type Workspace } from "@/lib/constants";
 
 export default function GalleryPage() {
-  const [workspace, setWorkspace] = useState<Workspace>("vietnoms");
-  const drive = useGoogleDrive();
-
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar workspace={workspace} onWorkspaceChange={setWorkspace} />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar
-          workspace={workspace}
-          totalCost={0}
-          driveStatus={{
-            configured: drive.configured,
-            connected: drive.connected,
-            isConnecting: drive.isConnecting,
-          }}
-          onDriveConnect={drive.connect}
-          onDriveDisconnect={drive.disconnect}
-        />
-        <main className="flex-1 overflow-hidden">
-          <GalleryView workspace={workspace} />
-        </main>
-      </div>
-    </div>
+    <AppShell>
+      {({ workspace }) => <GalleryView workspace={workspace} />}
+    </AppShell>
   );
 }

@@ -238,16 +238,87 @@ export function GalleryView({ workspace }: GalleryViewProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-foreground">Gallery</h2>
-          <span className="text-xs text-muted-foreground">
-            {total} image{total !== 1 ? "s" : ""}
-          </span>
+      <div className="px-3 md:px-6 py-3 md:py-4 border-b border-border space-y-2 md:space-y-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 md:gap-3">
+            <h2 className="text-sm font-semibold text-foreground">Gallery</h2>
+            <span className="text-xs text-muted-foreground">
+              {total} image{total !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 md:gap-3">
+            {/* Select mode toggle */}
+            <button
+              onClick={() => {
+                setIsSelectionMode(!isSelectionMode);
+                if (isSelectionMode) setSelectedIds(new Set());
+              }}
+              className={cn(
+                "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                isSelectionMode
+                  ? "bg-primary/10 text-primary border border-primary/30"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              )}
+            >
+              {isSelectionMode ? "Cancel" : "Select"}
+            </button>
+
+            {/* Refresh */}
+            <button
+              onClick={fetchImages}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+              title="Refresh"
+            >
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182"
+                />
+              </svg>
+            </button>
+
+            {/* View toggle - hidden on mobile */}
+            <div className="hidden md:flex rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "p-1.5 transition-colors",
+                  viewMode === "grid"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setViewMode("masonry")}
+                className={cn(
+                  "p-1.5 transition-colors",
+                  viewMode === "masonry"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v13.5a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6Z" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="relative">
+
+        {/* Search & tag filter row */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 md:flex-initial">
             <svg
               className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground"
               fill="none"
@@ -266,7 +337,7 @@ export function GalleryView({ workspace }: GalleryViewProps) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search prompts..."
-              className="h-8 w-52 pl-8 pr-3 rounded-lg bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors"
+              className="h-8 w-full md:w-52 pl-8 pr-3 rounded-lg bg-muted/50 border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors"
             />
           </div>
 
@@ -285,98 +356,11 @@ export function GalleryView({ workspace }: GalleryViewProps) {
               ))}
             </select>
           )}
-
-          {/* Select mode toggle */}
-          <button
-            onClick={() => {
-              setIsSelectionMode(!isSelectionMode);
-              if (isSelectionMode) setSelectedIds(new Set());
-            }}
-            className={cn(
-              "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-              isSelectionMode
-                ? "bg-primary/10 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-            )}
-          >
-            {isSelectionMode ? "Cancel" : "Select"}
-          </button>
-
-          {/* Refresh */}
-          <button
-            onClick={fetchImages}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-            title="Refresh"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182"
-              />
-            </svg>
-          </button>
-
-          {/* View toggle */}
-          <div className="flex rounded-lg border border-border overflow-hidden">
-            <button
-              onClick={() => setViewMode("grid")}
-              className={cn(
-                "p-1.5 transition-colors",
-                viewMode === "grid"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={() => setViewMode("masonry")}
-              className={cn(
-                "p-1.5 transition-colors",
-                viewMode === "masonry"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v13.5a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6Z"
-                />
-              </svg>
-            </button>
-          </div>
         </div>
       </div>
 
       {/* Filter tabs */}
-      <div className="px-6 py-2 border-b border-border flex items-center gap-1.5">
+      <div className="px-3 md:px-6 py-2 border-b border-border flex items-center gap-1.5 overflow-x-auto">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -395,11 +379,11 @@ export function GalleryView({ workspace }: GalleryViewProps) {
 
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
-        <div className="px-6 py-2 border-b border-border bg-primary/5 flex items-center gap-3">
-          <span className="text-xs font-medium text-foreground">
+        <div className="px-3 md:px-6 py-2 border-b border-border bg-primary/5 flex items-center gap-2 md:gap-3 overflow-x-auto">
+          <span className="text-xs font-medium text-foreground flex-shrink-0">
             {selectedIds.size} selected
           </span>
-          <div className="h-4 w-px bg-border" />
+          <div className="h-4 w-px bg-border flex-shrink-0" />
           <button
             onClick={() => bulkAction("approve")}
             className="px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
@@ -445,7 +429,7 @@ export function GalleryView({ workspace }: GalleryViewProps) {
       )}
 
       {/* Gallery content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -478,14 +462,14 @@ export function GalleryView({ workspace }: GalleryViewProps) {
             </div>
           </div>
         ) : (
-          <div className="flex gap-6">
+          <div className="flex gap-4 md:gap-6">
             {/* Image grid */}
             <div
               className={cn(
-                "flex-1",
+                "flex-1 min-w-0",
                 viewMode === "grid"
-                  ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-                  : "columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4"
+                  ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4"
+                  : "columns-2 md:columns-3 lg:columns-4 gap-3 md:gap-4 space-y-3 md:space-y-4"
               )}
             >
               {images.map((img) => (
@@ -606,9 +590,18 @@ export function GalleryView({ workspace }: GalleryViewProps) {
               ))}
             </div>
 
-            {/* Detail panel */}
+            {/* Detail panel - side panel on desktop, bottom overlay on mobile */}
             {selectedImage && !isSelectionMode && (
-              <div className="w-72 border border-border rounded-xl bg-card/50 p-4 space-y-4 flex-shrink-0 h-fit sticky top-0">
+              <>
+                {/* Mobile backdrop */}
+                <div
+                  className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+                  onClick={() => setSelectedImage(null)}
+                />
+              </>
+            )}
+            {selectedImage && !isSelectionMode && (
+              <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-border bg-card p-4 space-y-4 md:relative md:inset-auto md:z-auto md:max-h-none md:rounded-xl md:border md:w-72 md:flex-shrink-0 md:h-fit md:sticky md:top-0 md:bg-card/50">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-foreground">
                     Details

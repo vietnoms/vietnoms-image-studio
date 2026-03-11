@@ -92,8 +92,8 @@ export function MenuItemCard({ item, onUpdate, onDelete }: MenuItemCardProps) {
           )}
         </div>
 
-        {/* Badges */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        {/* Badges - hidden on small screens to save space */}
+        <div className="hidden sm:flex items-center gap-1.5 flex-shrink-0">
           <Badge variant="secondary" className="text-[10px]">
             {item.category}
           </Badge>

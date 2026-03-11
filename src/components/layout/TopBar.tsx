@@ -16,22 +16,34 @@ interface TopBarProps {
   driveStatus: DriveStatus;
   onDriveConnect: () => void;
   onDriveDisconnect: () => void;
+  onToggleSidebar?: () => void;
 }
 
-export function TopBar({ workspace, totalCost, driveStatus, onDriveConnect, onDriveDisconnect }: TopBarProps) {
+export function TopBar({ workspace, totalCost, driveStatus, onDriveConnect, onDriveDisconnect, onToggleSidebar }: TopBarProps) {
   const ws = WORKSPACES[workspace];
 
   return (
-    <header className="h-12 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-6">
-      <div className="flex items-center gap-3">
+    <header className="h-12 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-3 md:px-6">
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
+        {/* Hamburger menu for mobile */}
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="md:hidden p-1.5 -ml-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
+        )}
         <Badge
           variant="outline"
-          className="font-medium text-xs px-2.5 py-0.5 rounded-full"
+          className="font-medium text-xs px-2.5 py-0.5 rounded-full flex-shrink-0"
           style={{ borderColor: ws.color, color: ws.color }}
         >
           {ws.label}
         </Badge>
-        <span className="text-xs text-muted-foreground">{ws.description}</span>
+        <span className="text-xs text-muted-foreground hidden md:inline truncate">{ws.description}</span>
       </div>
       <div className="flex items-center gap-4">
         {/* Google Drive status */}

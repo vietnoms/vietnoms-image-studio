@@ -18,6 +18,13 @@ export const metadata: Metadata = {
   description: "AI-powered image generation for restaurant assets",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

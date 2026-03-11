@@ -615,9 +615,9 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
   const batchCostEstimate = selectedItems.length * IMAGE_COST_ESTIMATE.generation;
 
   return (
-    <div className="flex h-full">
+    <div className="flex flex-col md:flex-row h-full">
       {/* Left panel — Controls */}
-      <div className="w-[380px] border-r border-border p-4 space-y-4 overflow-y-auto">
+      <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-border p-4 space-y-4 overflow-y-auto">
         {/* Template selector */}
         <div className="space-y-2">
           <TemplateSelector
@@ -789,7 +789,7 @@ export function GeneratePanel({ workspace, onCostUpdate }: GeneratePanelProps) {
       </div>
 
       {/* Right panel — Preview or Batch Progress */}
-      <div className="flex-1 bg-background">
+      <div className="flex-1 min-h-[300px] md:min-h-0 bg-background">
         {batchResults.length > 0 ? (
           <BatchProgress
             total={batchTotal}

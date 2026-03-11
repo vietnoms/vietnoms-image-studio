@@ -109,24 +109,24 @@ export function CatalogView({ workspace }: CatalogViewProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Header bar */}
-      <div className="border-b border-border p-4 flex items-center gap-3">
-        <div className="flex-1">
+      <div className="border-b border-border p-3 md:p-4 flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
+        <div className="flex items-center gap-2 md:flex-1">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search items..."
-            className="max-w-xs h-8 rounded-lg bg-muted/50 border-border text-sm"
+            className="flex-1 md:max-w-xs h-9 md:h-8 rounded-lg bg-muted/50 border-border text-sm"
           />
+          <span className="text-xs text-muted-foreground flex-shrink-0">
+            {items.length} item{items.length !== 1 ? "s" : ""}
+          </span>
+          <button
+            onClick={() => setImportOpen(true)}
+            className="h-9 md:h-8 px-4 rounded-lg text-xs font-medium text-white gradient-primary hover:opacity-90 transition-all flex-shrink-0"
+          >
+            Import
+          </button>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {items.length} item{items.length !== 1 ? "s" : ""}
-        </span>
-        <button
-          onClick={() => setImportOpen(true)}
-          className="h-8 px-4 rounded-lg text-xs font-medium text-white gradient-primary hover:opacity-90 transition-all"
-        >
-          Import Items
-        </button>
       </div>
 
       {/* Category tabs */}

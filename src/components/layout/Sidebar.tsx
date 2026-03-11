@@ -8,6 +8,7 @@ import { WORKSPACES, type Workspace } from "@/lib/constants";
 interface SidebarProps {
   workspace: Workspace;
   onWorkspaceChange: (workspace: Workspace) => void;
+  onClose?: () => void;
 }
 
 const NAV_ITEMS = [
@@ -53,7 +54,7 @@ const ICONS: Record<string, React.ReactNode> = {
   ),
 };
 
-export function Sidebar({ workspace, onWorkspaceChange }: SidebarProps) {
+export function Sidebar({ workspace, onWorkspaceChange, onClose }: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -66,10 +67,21 @@ export function Sidebar({ workspace, onWorkspaceChange }: SidebarProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
             </svg>
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold tracking-tight">Image Studio</h1>
             <p className="text-[10px] text-muted-foreground">AI-powered generation</p>
           </div>
+          {/* Close button for mobile */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="md:hidden p-1.5 -mr-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -115,6 +127,7 @@ export function Sidebar({ workspace, onWorkspaceChange }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onClose}
                 className={cn(
                   "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-all duration-150 group relative",
                   isActive

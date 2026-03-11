@@ -30,23 +30,27 @@ export function ImportDialog({
 }: ImportDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-5xl w-[calc(100vw-3rem)] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-5xl w-[calc(100vw-1rem)] md:w-[calc(100vw-3rem)] max-h-[95vh] md:max-h-[90vh] overflow-y-auto rounded-t-2xl md:rounded-xl">
         <DialogHeader>
           <DialogTitle>Import Menu Items</DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="photo" className="mt-2">
           <TabsList className="w-full">
-            <TabsTrigger value="photo" className="flex-1">
-              Menu Board Photo
+            <TabsTrigger value="photo" className="flex-1 text-xs md:text-sm">
+              <span className="md:hidden">Photo</span>
+              <span className="hidden md:inline">Menu Board Photo</span>
             </TabsTrigger>
-            <TabsTrigger value="file" className="flex-1">
-              CSV / Spreadsheet
+            <TabsTrigger value="file" className="flex-1 text-xs md:text-sm">
+              <span className="md:hidden">CSV</span>
+              <span className="hidden md:inline">CSV / Spreadsheet</span>
             </TabsTrigger>
-            <TabsTrigger value="manual" className="flex-1">
-              Manual Entry
+            <TabsTrigger value="manual" className="flex-1 text-xs md:text-sm">
+              <span className="md:hidden">Manual</span>
+              <span className="hidden md:inline">Manual Entry</span>
             </TabsTrigger>
-            <TabsTrigger value="square" className="flex-1">
-              Square POS
+            <TabsTrigger value="square" className="flex-1 text-xs md:text-sm">
+              <span className="md:hidden">Square</span>
+              <span className="hidden md:inline">Square POS</span>
             </TabsTrigger>
           </TabsList>
 
